@@ -10,7 +10,6 @@ pub fn run(sh: &Shell) -> anyhow::Result<()> {
 
     let result = cmd!(sh, "swaymsg -t get_inputs").read()?;
     let json: Value = serde_json::from_str(&result)?;
-    // let layout_names = json[0]["xkb_layout_names"];
     let layout_names = &json[0]["xkb_layout_names"];
 
     if *layout_names == Value::Null {
@@ -31,11 +30,11 @@ pub fn run(sh: &Shell) -> anyhow::Result<()> {
             .collect::<Vec<_>>()
             .join("\n");
 
-        // unwrap: split always return at least 1 element
         let result_index_str = cmd!(sh, "wofi -d --prompt 'Choose keyboard layout'")
             .stdin(layout_names)
             .read()?;
 
+        // unwrap: split always return at least 1 element
         let result_index_str = result_index_str.split(':')
             .next()
             .unwrap();
