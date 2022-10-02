@@ -1,9 +1,11 @@
+#![allow(dead_code)]
+
 pub fn trim_sides(s: &str) -> &str {
     let mut chars = s.chars();
     chars.next();
     chars.next_back();
     chars.as_str()
-} 
+}
 
 #[cfg(test)]
 mod tests {

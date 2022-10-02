@@ -1,31 +1,61 @@
+use clap::{command, ArgMatches, Command};
 use xshell::Shell;
-use clap::{command, Command};
 
-type Menu = fn(&Shell) -> anyhow::Result<()>;
+type Definition = (
+    &'static str,
+    &'static str,
+    Option<fn(Command<'static>) -> Command<'static>>,
+);
+type Script = fn(&Shell, &ArgMatches) -> anyhow::Result<()>;
 
-mod menus;
+mod scripts;
 mod util;
 
-// TODO(rg): 
+// TODO(rg):
 // Possibly get this from build.rs? Would mean that we wouldn't have to touch the main.rs
 // file when adding a new menu / script
-const MENUS: &[(&str, &str, Menu)] = &[
-    ("power", "Shut down, reboot or suspend the machine", menus::power::run),
-    ("keyboard_layout", "Change the keyboard layout", menus::keyboard_layout::run)
+const SCRIPTS: &[(Definition, Script)] = &[
+    (
+        ("power", "Shut down, reboot or suspend the machine", None),
+        scripts::power::run,
+    ),
+    (
+        ("keyboard_layout", "Change the keyboard layout", None),
+        scripts::keyboard_layout::run,
+    ),
+    (
+        (
+            "font_size",
+            "Change the font size",
+            Some(scripts::font_size::command),
+        ),
+        scripts::font_size::run,
+    ),
 ];
 
 fn main() -> anyhow::Result<()> {
     let shell = Shell::new()?;
-    
+
     let matches = command!()
         .subcommand_required(true)
-        .subcommands(MENUS.iter().map(|menu| Command::new(menu.0).about(menu.1)))
+        .subcommands(SCRIPTS.iter().map(|&((name, about, args), _)| {
+            let base_command = Command::new(name).about(about);
+            if let Some(args) = args {
+                args(base_command)
+            } else {
+                base_command
+            }
+        }))
         .get_matches();
 
-    let menu_name = matches.subcommand().unwrap().0;
-    let menu = MENUS.iter().find(|&&elem| elem.0 == menu_name).unwrap().2;
+    let (subcmd_name, subcmd_args) = matches.subcommand().unwrap();
+    let script = SCRIPTS
+        .iter()
+        .find(|&&((name, _, _), _)| name == subcmd_name)
+        .unwrap()
+        .1;
 
-    menu(&shell)?;
+    script(&shell, subcmd_args)?;
 
     Ok(())
 }

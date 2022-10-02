@@ -1,15 +1,16 @@
-use xshell::{cmd, Shell};
+use clap::ArgMatches;
+use std::str::FromStr;
 use std::string::ToString;
 use strum::IntoEnumIterator;
-use std::str::FromStr;
-use strum_macros::{Display, EnumString, EnumIter};
+use strum_macros::{Display, EnumIter, EnumString};
+use xshell::{cmd, Shell};
 
 #[derive(Debug, Display, EnumString, EnumIter)]
 #[strum(serialize_all = "lowercase")]
 enum PowerMenuOption {
     Shutdown,
     Suspend,
-    Reboot
+    Reboot,
 }
 
 impl PowerMenuOption {
@@ -17,7 +18,7 @@ impl PowerMenuOption {
         let cmd = match *self {
             PowerMenuOption::Shutdown => cmd!(sh, "shutdown now"),
             PowerMenuOption::Suspend => cmd!(sh, "reboot"),
-            PowerMenuOption::Reboot => cmd!(sh, "systemctl suspend") 
+            PowerMenuOption::Reboot => cmd!(sh, "systemctl suspend"),
         };
 
         cmd.run()?;
@@ -26,7 +27,7 @@ impl PowerMenuOption {
     }
 }
 
-pub fn run(sh: &Shell) -> anyhow::Result<()> {
+pub fn run(sh: &Shell, _: &ArgMatches) -> anyhow::Result<()> {
     let opts: Vec<_> = PowerMenuOption::iter().map(|opt| opt.to_string()).collect();
 
     let result = cmd!(sh, "wofi -d --prompt 'Choose operation'")
@@ -37,4 +38,3 @@ pub fn run(sh: &Shell) -> anyhow::Result<()> {
 
     Ok(())
 }
-
