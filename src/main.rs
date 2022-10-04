@@ -33,6 +33,10 @@ const SCRIPTS: &[(Definition, Script)] = &[
         ),
         scripts::font_size::run,
     ),
+    (
+        ("font_family", "Change the font family", None),
+        scripts::font_family::run
+    )
 ];
 
 fn main() -> anyhow::Result<()> {
