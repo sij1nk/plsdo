@@ -1,3 +1,5 @@
+#![feature(iter_intersperse)]
+
 use clap::{command, ArgMatches, Command};
 use xshell::Shell;
 
@@ -34,6 +36,7 @@ const SCRIPTS: &[(Definition, Script)] = &[
 ];
 
 fn main() -> anyhow::Result<()> {
+    // TODO(rg): shell is not always needed (e.g. font_size)
     let shell = Shell::new()?;
 
     let matches = command!()
