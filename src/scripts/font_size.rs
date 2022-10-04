@@ -1,6 +1,6 @@
 use clap::{arg, value_parser, ArgMatches, Command, ValueEnum};
-use std::fs::{File, OpenOptions};
-use std::io::{BufRead, BufReader, Read, BufWriter, Seek, SeekFrom, Write};
+use std::fs::{OpenOptions};
+use std::io::{BufReader, Read, BufWriter, Seek, SeekFrom, Write};
 use xshell::Shell;
 
 const FILENAME: &str = ".dotfiles/config/alacritty/alacritty.yml";
