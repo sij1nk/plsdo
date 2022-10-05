@@ -26,8 +26,6 @@ pub fn run(sh: &Shell, _: &ArgMatches) -> anyhow::Result<()> {
             }
         }
 
-        let rest = lines.intersperse("\n").collect::<String>();
-
         let chosen = cmd!(sh, "wofi -d --prompt 'Choose font family'")
             .stdin(font_families.join("\n"))
             .read()?;
@@ -51,9 +49,7 @@ pub fn run(sh: &Shell, _: &ArgMatches) -> anyhow::Result<()> {
                     let _ = writer.write(b"\n")?;
                 }
 
-                let rest = lines.intersperse("\n").collect::<String>();
-
-                Ok(rest)
+                Ok(())
             })?;
 
         writer.write_all(b"    <prefer>\n")?;
@@ -64,7 +60,7 @@ pub fn run(sh: &Shell, _: &ArgMatches) -> anyhow::Result<()> {
         }
         writer.write_all(b"    </prefer>\n")?;
 
-        Ok(rest)
+        Ok(())
     })?;
 
     Ok(())

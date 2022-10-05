@@ -3,7 +3,7 @@
 use std::{fs::{File, OpenOptions}, io::{BufReader, BufWriter, Read, Write }, str::Split};
 
 pub fn modify_file<F>(path_from_home: &str, splitter: &str, modifier: F) -> anyhow::Result<()>
-    where F: FnOnce(&mut Split<char>, &mut BufWriter<&File>) -> anyhow::Result<String>
+    where F: FnOnce(&mut Split<char>, &mut BufWriter<&File>) -> anyhow::Result<()>
 {
     // unwrap: we don't want to continue if home doesn't exist
     let mut path = dirs::home_dir().unwrap();
@@ -39,7 +39,9 @@ pub fn modify_file<F>(path_from_home: &str, splitter: &str, modifier: F) -> anyh
     writer.write_all(before.as_bytes())?;
     writer.write_all(splitter.as_bytes())?;
 
-    let rest = modifier(&mut after_lines, &mut writer)?;
+    modifier(&mut after_lines, &mut writer)?;
+
+    let rest = after_lines.intersperse("\n").collect::<String>();
 
     writer.write_all(rest.as_bytes())?;
     writer.flush()?;

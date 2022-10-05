@@ -50,9 +50,7 @@ pub fn run(_sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
 
             writer.write_all(format!("  size: {}\n", new_value).as_bytes())?;
 
-            let rest = lines.intersperse("\n").collect::<String>();
-
-            Ok(rest)
+            Ok(())
         })?;
 
     Ok(())
