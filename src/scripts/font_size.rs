@@ -32,6 +32,7 @@ pub fn run(_sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
     // unwrap: argument is required
     let delta = args.get_one::<i32>("DELTA").unwrap();
 
+    // unwrap: we don't want to continue if home doesn't exist
     let mut path = dirs::home_dir().unwrap();
     path.push(FILENAME);
     println!("{:?}", dir);
@@ -69,6 +70,7 @@ pub fn run(_sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
         *delta
     };
 
+    // unwrap: usize to u64 will work on a 64 bit target
     writer.seek(SeekFrom::Start(beginning_len.try_into().unwrap()))?;
     writer.write_all(SPLITTER.as_bytes())?;
     writer.write_all(format!("{} {}\n", SIZE_PREFIX, new_value).as_bytes())?;

@@ -9,9 +9,11 @@ const TARGET: &str = "<family>monospace</family>\n";
 
 pub fn run(sh: &Shell, _: &ArgMatches) -> anyhow::Result<()> {
 
+    // unwrap: we don't want to continue if home doesn't exist
     let mut path = dirs::home_dir().unwrap();
     path.push(FILENAME);
 
+    // unwrap: we don't want to continue if home doesn't exist
     let mut temp_path = dirs::home_dir().unwrap();
     temp_path.push(TEMP_FILENAME);
 
@@ -47,8 +49,6 @@ pub fn run(sh: &Shell, _: &ArgMatches) -> anyhow::Result<()> {
     }
 
     let rest = after_lines.intersperse("\n").collect::<String>();
-    println!("before: {before}");
-    println!("rest: {rest}");
 
     let chosen = cmd!(sh, "wofi -d --prompt 'Choose font family'")
         .stdin(font_families.join("\n"))
