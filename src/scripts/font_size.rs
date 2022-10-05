@@ -1,11 +1,7 @@
 use clap::{arg, value_parser, ArgMatches, Command, ValueEnum};
-use std::fs::{OpenOptions};
-use std::io::{BufReader, Read, BufWriter, Seek, SeekFrom, Write};
+use std::io::Write;
 use xshell::Shell;
-
-const FILENAME: &str = ".dotfiles/config/alacritty/alacritty.yml";
-const SPLITTER: &str = "  # Point size\n";
-const SIZE_PREFIX: &str = "  size:";
+use crate::util;
 
 #[derive(ValueEnum, Clone, Debug)]
 enum Direction {
@@ -32,50 +28,32 @@ pub fn run(_sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
     // unwrap: argument is required
     let delta = args.get_one::<i32>("DELTA").unwrap();
 
-    // unwrap: we don't want to continue if home doesn't exist
-    let mut path = dirs::home_dir().unwrap();
-    path.push(FILENAME);
-    println!("{:?}", dir);
-    println!("{:?}", path);
+    util::modify_file(".dotfiles/config/alacritty/alacritty.yml", "# Point size\n", 
+        |lines, writer| {
+            let previous_value_line = lines.next().ok_or_else(|| anyhow::anyhow!("Line containing previous value not found"))?;
 
-    let file = 
-        OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(path)?;
-        // File::open(path)?;
-    let mut reader = BufReader::new(&file);
-    let mut writer = BufWriter::new(&file);
-    let mut contents = String::new();
-    reader.read_to_string(&mut contents)?;
+            let new_value = if let Some(dir) = dir {
+                let previous_value = previous_value_line
+                    .trim()
+                    .split_once(' ')
+                    .ok_or_else(|| anyhow::anyhow!("Could not split line containing previous value"))?
+                    .1
+                    .parse::<i32>()?;
 
-    let mut split = contents.split(SPLITTER);
-    let beginning_len = split.next().ok_or_else(|| anyhow::anyhow!("File beginning not found"))?.len();
-    let (previous_value_line, rest) = split.next().ok_or_else(|| anyhow::anyhow!("File ending not found"))?
-        .split_once('\n').ok_or_else(|| anyhow::anyhow!("Could not find newline to split on"))?;
+                match dir {
+                    Direction::Up => previous_value + delta,
+                    Direction::Down => previous_value - delta
+                }
+            } else {
+                *delta
+            };
 
-    let new_value = if let Some(dir) = dir {
-        let previous_value = previous_value_line
-            .trim()
-            .split_once(' ')
-            .ok_or_else(|| anyhow::anyhow!("Could not split line containing previous value"))?
-            .1
-            .parse::<i32>()?;
+            writer.write_all(format!("  size: {}\n", new_value).as_bytes())?;
 
-        match dir {
-            Direction::Up => previous_value + delta,
-            Direction::Down => previous_value - delta
-        }
-    } else {
-        *delta
-    };
+            let rest = lines.intersperse("\n").collect::<String>();
 
-    // unwrap: usize to u64 will work on a 64 bit target
-    writer.seek(SeekFrom::Start(beginning_len.try_into().unwrap()))?;
-    writer.write_all(SPLITTER.as_bytes())?;
-    writer.write_all(format!("{} {}\n", SIZE_PREFIX, new_value).as_bytes())?;
-    writer.write_all(rest.as_bytes())?;
-    writer.flush()?;
+            Ok(rest)
+        })?;
 
     Ok(())
 }

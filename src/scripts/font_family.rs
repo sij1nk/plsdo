@@ -1,60 +1,12 @@
-use std::{io::{BufReader, Read, BufWriter, Write}, fs::{File, OpenOptions}, str::Split};
+use std::io::Write;
+use crate::util;
 
 use clap::ArgMatches;
 use xshell::{Shell, cmd};
 
-
-fn modify_file<F>(path_from_home: &str, splitter: &str, modifier: F) -> anyhow::Result<()>
-    where F: FnOnce(&mut Split<char>, &mut BufWriter<&File>) -> anyhow::Result<String>
-{
-    // unwrap: we don't want to continue if home doesn't exist
-    let mut path = dirs::home_dir().unwrap();
-    let mut temp_path = path.clone();
-
-    path.push(path_from_home);
-
-    let file_name = path.file_name()
-        .ok_or_else(|| anyhow::anyhow!("Given path is not pointing to a file"))?
-        .to_str()
-        .ok_or_else(|| anyhow::anyhow!("File name is not valid UTF-8"))?;
-
-    temp_path.push(".cache");
-    temp_path.push(file_name.to_string() + ".confset");
-
-    let file = File::open(&path)?;
-    let mut reader = BufReader::new(&file);
-
-    let temp_file = OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(true)
-        .open(&temp_path)?;
-    let mut writer = BufWriter::new(&temp_file);
-
-    let mut contents = String::new();
-    reader.read_to_string(&mut contents)?;
-
-    let (before, after) = contents.split_once(splitter).ok_or_else(|| anyhow::anyhow!("Could not find splitter string"))?;
-
-    let mut after_lines = after.split('\n');
-
-    writer.write_all(before.as_bytes())?;
-    writer.write_all(splitter.as_bytes())?;
-
-    let rest = modifier(&mut after_lines, &mut writer)?;
-
-    writer.write_all(rest.as_bytes())?;
-    writer.flush()?;
-
-    std::fs::rename(temp_path, path)?;
-
-    Ok(())
-}
-
-
 pub fn run(sh: &Shell, _: &ArgMatches) -> anyhow::Result<()> {
 
-    modify_file(".dotfiles/config/fontconfig/fonts.conf", "<family>monospace</family>\n", 
+    util::modify_file(".dotfiles/config/fontconfig/fonts.conf", "<family>monospace</family>\n", 
         |lines, writer| {
         let mut font_families = Vec::new();
 
@@ -84,7 +36,7 @@ pub fn run(sh: &Shell, _: &ArgMatches) -> anyhow::Result<()> {
             return Err(anyhow::anyhow!("Chosen value is not a valid font family name"));
         }
 
-        modify_file(".dotfiles/config/alacritty/alacritty.yml", "font:\n",
+        util::modify_file(".dotfiles/config/alacritty/alacritty.yml", "font:\n",
             |lines, writer| {
 
                 for line in lines.by_ref() {
