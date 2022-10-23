@@ -34,7 +34,7 @@ pub fn run(sh: &Shell, _: &ArgMatches) -> anyhow::Result<()> {
             return Err(anyhow::anyhow!("Chosen value is not a valid font family name"));
         }
 
-        util::modify_file(".dotfiles/config/alacritty/alacritty.yml", "font:\n",
+        util::modify_file(".config/alacritty/alacritty.yml", "font:\n",
             |lines, writer| {
 
                 for line in lines.by_ref() {
