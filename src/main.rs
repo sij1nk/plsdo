@@ -36,6 +36,10 @@ const SCRIPTS: &[(Definition, Script)] = &[
     (
         ("font_family", "Change the font family", None),
         scripts::font_family::run
+    ),
+    (
+        ("playerctl", "Control media players", Some(scripts::playerctl::command)),
+        scripts::playerctl::run,
     )
 ];
 
