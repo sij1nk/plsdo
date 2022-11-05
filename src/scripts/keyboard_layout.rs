@@ -5,6 +5,8 @@ use std::str::FromStr;
 use serde_json::Value;
 use xshell::{cmd, Shell};
 
+use crate::util::dmenu;
+
 pub fn run(sh: &Shell, _: &ArgMatches) -> anyhow::Result<()> {
     let result = cmd!(sh, "swaymsg -t get_inputs").read()?;
     let json: Value = serde_json::from_str(&result)?;
@@ -28,9 +30,8 @@ pub fn run(sh: &Shell, _: &ArgMatches) -> anyhow::Result<()> {
             .collect::<Vec<_>>()
             .join("\n");
 
-        let result_index_str = cmd!(sh, "wofi -d --prompt 'Choose keyboard layout'")
-            .stdin(layout_names)
-            .read()?;
+        // unwrap: don't want to continue if string is empty
+        let result_index_str = dmenu(sh, "Choose keyboard layout", layout_names).unwrap();
 
         // unwrap: split always return at least 1 element
         let result_index_str = result_index_str.split(':').next().unwrap();

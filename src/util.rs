@@ -2,6 +2,24 @@
 
 use std::{fs::{File, OpenOptions}, io::{BufReader, BufWriter, Read, Write }, str::Split};
 
+use xshell::{cmd, Shell};
+
+// TODO: maybe the 2nd argument could be more generic
+pub fn dmenu(sh: &Shell, prompt: &str, choices: String) -> anyhow::Result<String> {
+    if let Some((_, session_type)) = std::env::vars().find(|(k, _)| k == "XDG_SESSION_TYPE") {
+        if session_type == "wayland" {
+            return Ok(cmd!(sh, "wofi -d --prompt {prompt}")
+                .stdin(choices)
+                .read()?);
+        }
+    }
+
+    Ok(cmd!(sh, "dmenu -p {prompt} -i -fn 'monospace:size=24'")
+        .stdin(choices)
+        .read()?)
+}
+
+
 pub fn modify_file<F>(path_from_home: &str, splitter: &str, modifier: F) -> anyhow::Result<()>
     where F: FnOnce(&mut Split<char>, &mut BufWriter<&File>) -> anyhow::Result<()>
 {

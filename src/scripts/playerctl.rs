@@ -3,6 +3,8 @@ use std::{fs::{OpenOptions, File}, io::{Write, Read}, path::PathBuf};
 use clap::{ArgMatches, Command, Parser, Subcommand, FromArgMatches};
 use xshell::{Shell, cmd};
 
+use crate::util::dmenu;
+
 const SELECTED_PLAYER_FILENAME: &str = "selected-player.confset";
 
 fn get_player_specific_subcommand(player: &str, cmd: &PlayerCommand) -> anyhow::Result<&'static str> {
@@ -22,6 +24,7 @@ fn get_player_specific_subcommand(player: &str, cmd: &PlayerCommand) -> anyhow::
 
 #[derive(Parser, Clone, Debug, Eq, PartialEq, Hash)]
 enum PlayerCommand {
+    ShowStatus,
     SelectPlayer { player: Option<String> },
     Play,
     Pause,
@@ -116,10 +119,8 @@ pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
         let selected_player = if let Some(player) = player {
             player
         } else {
-
-            cmd!(sh, "wofi -d --prompt 'Choose media player to control'")
-                .stdin(players.join("\n"))
-                .read()?
+            // unwrap: we don't want to continue if the resulting string is empty
+            dmenu(sh, "Choose media player to control", players.join("\n")).unwrap()
         };
 
         if !players.iter().any(|&player| player == selected_player) {
@@ -127,6 +128,9 @@ pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
         }
 
         write_selected_player_to_file(&selected_player)?;
+    } else if PlayerCommand::ShowStatus == subcmd {
+        println!("balls");
+
     } else {
         let player = get_selected_player_from_file()?;
         invoke_player_command(sh, &player, subcmd)?;

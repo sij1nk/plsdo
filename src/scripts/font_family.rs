@@ -1,5 +1,5 @@
 use std::io::Write;
-use crate::util;
+use crate::util::{self, dmenu};
 
 use clap::ArgMatches;
 use xshell::{Shell, cmd};
@@ -26,9 +26,8 @@ pub fn run(sh: &Shell, _: &ArgMatches) -> anyhow::Result<()> {
             }
         }
 
-        let chosen = cmd!(sh, "wofi -d --prompt 'Choose font family'")
-            .stdin(font_families.join("\n"))
-            .read()?;
+        // unwrap: we don't want to continue if the string is empty
+        let chosen = dmenu(sh, "Choose font family", font_families.join("\n")).unwrap();
 
         if !font_families.iter().any(|&family| family == chosen) {
             return Err(anyhow::anyhow!("Chosen value is not a valid font family name"));
