@@ -60,6 +60,7 @@ fn main() -> anyhow::Result<()> {
         .get_matches();
 
     let (subcmd_name, subcmd_args) = matches.subcommand().unwrap();
+    // TODO: unwrap
     let script = SCRIPTS
         .iter()
         .find(|&&((name, _, _), _)| name == subcmd_name)

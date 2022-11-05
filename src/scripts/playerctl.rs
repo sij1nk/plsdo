@@ -7,19 +7,19 @@ use crate::util::dmenu;
 
 const SELECTED_PLAYER_FILENAME: &str = "selected-player.confset";
 
-fn get_player_specific_subcommand(player: &str, cmd: &PlayerCommand) -> anyhow::Result<&'static str> {
-    let variants = match cmd {             // playerctl     mpd
-        PlayerCommand::Play =>              ("play",       "play"),
-        PlayerCommand::Pause =>             ("pause",      "pause"),
-        PlayerCommand::Toggle =>            ("play-pause", "toggle"),
-        PlayerCommand::Stop =>              ("stop",       "stop"),
-        PlayerCommand::Skip { delta: _ } => ("position",   "seek"),
-        PlayerCommand::Next =>              ("next",       "next"),
-        PlayerCommand::Prev =>              ("previous",   "prev"),
+fn get_playerctl_subcommand(cmd: &PlayerCommand) -> anyhow::Result<&'static str> {
+    let subcommand = match cmd {         
+        PlayerCommand::Play =>              "play",     
+        PlayerCommand::Pause =>             "pause",   
+        PlayerCommand::Toggle =>            "play-pause",
+        PlayerCommand::Stop =>              "stop",     
+        PlayerCommand::Skip { delta: _ } => "position",
+        PlayerCommand::Next =>              "next",    
+        PlayerCommand::Prev =>              "previous",
         _ => return Err(anyhow::anyhow!("{:?} is not supposed to show up here!", cmd))
     };
 
-    Ok(if player == "mpd" {variants.1} else {variants.0})
+    Ok(subcommand)
 }
 
 #[derive(Parser, Clone, Debug, Eq, PartialEq, Hash)]
@@ -72,25 +72,27 @@ fn get_selected_player_from_file() -> anyhow::Result<String> {
 }
 
 fn invoke_player_command(sh: &Shell, player: &str, command: PlayerCommand) -> anyhow::Result<()> {
-    let executable = if player == "mpd" { "mpc" } else { "playerctl" };
-    let executable_subcommand = get_player_specific_subcommand(player, &command)?;
+    let playerctl_subcommand = get_playerctl_subcommand(&command)?;
 
-    let mut cmd = cmd!(sh, "{executable}")
-        .arg(executable_subcommand);
-
-    if executable == "playerctl" {
-        cmd = cmd.arg("-p").arg(player);
-    }
+    let mut cmd = cmd!(sh, "playerctl")
+        .arg(playerctl_subcommand)
+        .arg("-p").arg(player);
 
     if let PlayerCommand::Skip { delta } = command {
         cmd = cmd.arg(delta.to_string());
     }
 
-
-    println!("{cmd}");
     cmd.run()?;
 
     Ok(())
+}
+
+fn show_status(player: &str) {
+    if player == "spotify" {
+        println!("spotify playing some shit");
+    } else {
+        println!("mpd or something else playing some shit");
+    }
 }
 
 pub fn command(cmd: Command<'static>) -> Command<'static> {
@@ -98,23 +100,20 @@ pub fn command(cmd: Command<'static>) -> Command<'static> {
 }
 
 pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
+    // TODO: unwrap
     let subcmd = PlayerCommand::from_arg_matches(args)
         .map_err(|err| err.exit())
         .unwrap();
 
     if let PlayerCommand::SelectPlayer { player } = subcmd {
         let players = cmd!(sh, "playerctl -l").read()?;
-        let mut players: Vec<_> = players.split('\n').map(|player| {
+        let players: Vec<_> = players.split('\n').map(|player| {
             if let Some((before, _after)) = player.split_once('.') {
                 before
             } else {
                 player
             }
         }).collect();
-
-        // TODO(rg): detect if mpd is up, and only include it if it is up. For now we pretend
-        // it's always up
-        players.push("mpd");
 
         let selected_player = if let Some(player) = player {
             player
@@ -129,8 +128,8 @@ pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
 
         write_selected_player_to_file(&selected_player)?;
     } else if PlayerCommand::ShowStatus == subcmd {
-        println!("balls");
-
+        let player = get_selected_player_from_file()?;
+        show_status(&player);
     } else {
         let player = get_selected_player_from_file()?;
         invoke_player_command(sh, &player, subcmd)?;
