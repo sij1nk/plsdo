@@ -4,19 +4,33 @@ use std::{fs::{File, OpenOptions}, io::{BufReader, BufWriter, Read, Write }, str
 
 use xshell::{cmd, Shell};
 
-// TODO: maybe the 2nd argument could be more generic
-pub fn dmenu(sh: &Shell, prompt: &str, choices: String) -> anyhow::Result<String> {
-    if let Some((_, session_type)) = std::env::vars().find(|(k, _)| k == "XDG_SESSION_TYPE") {
+fn dmenu_inner_x11(sh: &Shell, prompt: &str, choices_joined: &str) -> anyhow::Result<String> {
+    Ok(cmd!(sh, "dmenu -p {prompt} -i -l 10 -fn 'monospace:size=24'")
+        .stdin(choices_joined)
+        .read()?)
+}
+
+pub fn dmenu<T>(sh: &Shell, prompt: &str, choices: &[T], forbid_invalid: bool) -> anyhow::Result<String> 
+where T: AsRef<str> {
+    let choices_joined = choices.iter().map(|c| c.as_ref()).collect::<Vec<_>>().join("\n");
+
+    let chosen = if let Some((_, session_type)) = std::env::vars().find(|(k, _)| k == "XDG_SESSION_TYPE") {
         if session_type == "wayland" {
-            return Ok(cmd!(sh, "wofi -d --prompt {prompt}")
-                .stdin(choices)
-                .read()?);
+            cmd!(sh, "wofi -d --prompt {prompt}")
+                .stdin(&choices_joined)
+                .read()?
+        } else {
+            dmenu_inner_x11(sh, prompt, &choices_joined)?
         }
+    } else {
+        dmenu_inner_x11(sh, prompt, &choices_joined)?
+    };
+
+    if forbid_invalid && !choices_joined.contains(&chosen) {
+        return Err(anyhow::anyhow!("Invalid input given"));
     }
 
-    Ok(cmd!(sh, "dmenu -p {prompt} -i -fn 'monospace:size=24'")
-        .stdin(choices)
-        .read()?)
+    Ok(chosen)
 }
 
 

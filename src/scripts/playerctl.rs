@@ -5,6 +5,18 @@ use xshell::{Shell, cmd};
 
 use crate::util::dmenu;
 
+// TODO:
+// - show-status:
+//    - basic text output
+//    - add styling
+//    - click to toggle; rclick to cycle players, if possible
+// - update selplayer when opening spotify
+// - spotify probs cant poke us when its status changes, 
+//   so the statusblock needs to poll every few seconds
+// - port mpcsignal from old dotfiles to make mpd poke us on status change
+// - force statusblock to update when command is given
+// - done?
+
 const SELECTED_PLAYER_FILENAME: &str = "selected-player.confset";
 
 fn get_playerctl_subcommand(cmd: &PlayerCommand) -> anyhow::Result<&'static str> {
@@ -119,12 +131,8 @@ pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
             player
         } else {
             // unwrap: we don't want to continue if the resulting string is empty
-            dmenu(sh, "Choose media player to control", players.join("\n")).unwrap()
+            dmenu(sh, "Choose media player to control", &players, true).unwrap()
         };
-
-        if !players.iter().any(|&player| player == selected_player) {
-            return Err(anyhow::anyhow!("selected media player does not exist"));
-        }
 
         write_selected_player_to_file(&selected_player)?;
     } else if PlayerCommand::ShowStatus == subcmd {

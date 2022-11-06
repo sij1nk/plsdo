@@ -40,6 +40,10 @@ const SCRIPTS: &[(Definition, Script)] = &[
     (
         ("playerctl", "Control media players", Some(scripts::playerctl::command)),
         scripts::playerctl::run,
+    ),
+    (
+        ("game", "Launch a game through Lutris", None),
+        scripts::game::run
     )
 ];
 

@@ -33,7 +33,7 @@ pub fn run(sh: &Shell, _: &ArgMatches) -> anyhow::Result<()> {
     let opts: Vec<_> = PowerMenuOption::iter().map(|opt| opt.to_string()).collect();
 
     // unwrap: don't want to continue if string is empty 
-    let result = dmenu(sh, "Choose operation", opts.join("\n")).unwrap();
+    let result = dmenu(sh, "Choose operation", &opts, true).unwrap();
 
     PowerMenuOption::from_str(&result)?.execute(sh)?;
 

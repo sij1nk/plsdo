@@ -27,11 +27,10 @@ pub fn run(sh: &Shell, _: &ArgMatches) -> anyhow::Result<()> {
                     None
                 }
             })
-            .collect::<Vec<_>>()
-            .join("\n");
+            .collect::<Vec<_>>();
 
         // unwrap: don't want to continue if string is empty
-        let result_index_str = dmenu(sh, "Choose keyboard layout", layout_names).unwrap();
+        let result_index_str = dmenu(sh, "Choose keyboard layout", &layout_names, true).unwrap();
 
         // unwrap: split always return at least 1 element
         let result_index_str = result_index_str.split(':').next().unwrap();
