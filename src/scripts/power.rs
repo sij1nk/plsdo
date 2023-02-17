@@ -19,8 +19,8 @@ impl PowerMenuOption {
     fn execute(&self, sh: &Shell) -> anyhow::Result<()> {
         let cmd = match *self {
             PowerMenuOption::Shutdown => cmd!(sh, "shutdown now"),
-            PowerMenuOption::Suspend => cmd!(sh, "reboot"),
-            PowerMenuOption::Reboot => cmd!(sh, "systemctl suspend"),
+            PowerMenuOption::Suspend => cmd!(sh, "systemctl suspend"),
+            PowerMenuOption::Reboot => cmd!(sh, "reboot"),
         };
 
         cmd.run()?;
