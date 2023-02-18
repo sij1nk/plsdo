@@ -1,8 +1,32 @@
 #![allow(dead_code)]
 
-use std::{fs::{File, OpenOptions}, io::{BufReader, BufWriter, Read, Write }, str::Split};
+use std::str::Split;
+use std::io::{BufReader, BufWriter, Read, Write };
+use std::fs::{File, OpenOptions};
+use std::env;
 
 use xshell::{cmd, Shell};
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum WM {
+    Sway,
+    River,
+    X11
+}
+
+pub fn determine_wm() -> WM {
+    if let Some(value) = env::vars()
+        .find(|(k, _)| k == "XDG_CURRENT_DESKTOP")
+            .map(|(_, v)| v) {
+                match value.as_str() {
+                    "sway" => WM::Sway,
+                    "river" => WM::River,
+                    _ => WM::X11
+                }
+    } else {
+        WM::X11
+    }
+}
 
 fn dmenu_inner_x11(sh: &Shell, prompt: &str, choices_joined: &str) -> anyhow::Result<String> {
     Ok(cmd!(sh, "dmenu -p {prompt} -i -l 10 -fn 'monospace:size=24'")
@@ -32,7 +56,6 @@ where T: AsRef<str> {
 
     Ok(chosen)
 }
-
 
 pub fn modify_file<F>(path_from_home: &str, splitter: &str, modifier: F) -> anyhow::Result<()>
     where F: FnOnce(&mut Split<char>, &mut BufWriter<&File>) -> anyhow::Result<()>

@@ -2,7 +2,7 @@ use std::io::Write;
 use crate::util::{self, dmenu};
 
 use clap::ArgMatches;
-use xshell::{Shell, cmd};
+use xshell::Shell;
 
 pub fn run(sh: &Shell, _: &ArgMatches) -> anyhow::Result<()> {
 
