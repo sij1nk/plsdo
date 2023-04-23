@@ -16,7 +16,7 @@ pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
         .split('\n')
         .map(|s| 
             s.split('|')
-            .take(3)
+            .take(2)
             .collect::<Vec<_>>().join("|"))
         .collect::<Vec<_>>();
     choices.sort();
