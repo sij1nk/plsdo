@@ -23,8 +23,7 @@ pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
 
     let mut filtered_choices = choices.clone();
     let mut search = "";
-    if let Some(_search) = args.get_one::<String>("GAME") {
-        search = _search;
+    if let Some(search) = args.get_one::<String>("GAME") {
         filtered_choices.retain(|name| name.contains(search));
     }
 
