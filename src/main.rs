@@ -42,7 +42,7 @@ const SCRIPTS: &[(Definition, Script)] = &[
         scripts::playerctl::run,
     ),
     (
-        ("game", "Launch a game through Lutris", None),
+        ("game", "Launch a game through Lutris", Some(scripts::game::command)),
         scripts::game::run
     )
 ];
