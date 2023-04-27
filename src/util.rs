@@ -72,7 +72,7 @@ pub fn modify_file<F>(path_from_home: &str, splitter: &str, modifier: F) -> anyh
         .ok_or_else(|| anyhow::anyhow!("File name is not valid UTF-8"))?;
 
     temp_path.push(".cache");
-    temp_path.push(file_name.to_string() + ".confset");
+    temp_path.push(file_name.to_string() + ".plsdo");
 
     let file = File::open(&path)?;
     let mut reader = BufReader::new(&file);

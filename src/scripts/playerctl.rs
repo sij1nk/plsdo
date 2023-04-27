@@ -17,7 +17,7 @@ use crate::util::dmenu;
 // - force statusblock to update when command is given
 // - done?
 
-const SELECTED_PLAYER_FILENAME: &str = "selected-player.confset";
+const SELECTED_PLAYER_FILENAME: &str = "selected-player.plsdo";
 
 fn get_playerctl_subcommand(cmd: &PlayerCommand) -> anyhow::Result<&'static str> {
     let subcommand = match cmd {         
