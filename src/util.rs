@@ -3,7 +3,9 @@
 use std::env;
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, BufWriter, Read, Write};
+use std::path::Path;
 
+use anyhow::Context;
 use xshell::{cmd, Shell};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -51,18 +53,21 @@ where
         .collect::<Vec<_>>()
         .join("\n");
 
-    let chosen =
+    let chosen: anyhow::Result<String> =
         if let Some((_, session_type)) = std::env::vars().find(|(k, _)| k == "XDG_SESSION_TYPE") {
             if session_type == "wayland" {
                 cmd!(sh, "wofi -d --prompt {prompt}")
                     .stdin(&choices_joined)
-                    .read()?
+                    .read()
+                    .map_err(|e| anyhow::Error::new(e))
             } else {
-                dmenu_inner_x11(sh, prompt, &choices_joined)?
+                dmenu_inner_x11(sh, prompt, &choices_joined)
             }
         } else {
-            dmenu_inner_x11(sh, prompt, &choices_joined)?
+            dmenu_inner_x11(sh, prompt, &choices_joined)
         };
+
+    let chosen = chosen.context("Aborted")?;
 
     if forbid_invalid && !choices_joined.contains(&chosen) {
         return Err(anyhow::anyhow!("Invalid input given"));
@@ -71,15 +76,13 @@ where
     Ok(chosen)
 }
 
-pub fn modify_file<F>(path_from_home: &str, splitter: &str, modifier: F) -> anyhow::Result<()>
+pub fn modify_file<F>(path: &str, splitter: &str, modifier: F) -> anyhow::Result<()>
 where
     F: FnOnce(&mut LinesWithEndings, &mut BufWriter<&File>) -> anyhow::Result<()>,
 {
     // unwrap: we don't want to continue if home doesn't exist
-    let mut path = dirs::home_dir().unwrap();
-    let mut temp_path = path.clone();
-
-    path.push(path_from_home);
+    let path = Path::new(path);
+    let mut temp_path = path.clone().to_path_buf();
 
     let file_name = path
         .file_name()

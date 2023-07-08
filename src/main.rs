@@ -1,4 +1,5 @@
 use clap::{command, ArgMatches, Command};
+use system_atlas::SystemAtlas;
 use xshell::Shell;
 
 type Definition = (
@@ -6,14 +7,12 @@ type Definition = (
     &'static str,                                     // description
     Option<fn(Command<'static>) -> Command<'static>>, // command extension
 );
-type Script = fn(&Shell, &ArgMatches) -> anyhow::Result<()>;
+type Script = fn(&Shell, &ArgMatches, &SystemAtlas) -> anyhow::Result<()>;
 
 mod scripts;
+mod system_atlas;
 mod util;
 
-// TODO(rg):
-// Possibly get this from build.rs? Would mean that we wouldn't have to touch the main.rs
-// file when adding a new menu / script
 const SCRIPTS: &[(Definition, Script)] = &[
     (
         ("power", "Shut down, reboot or suspend the machine", None),
@@ -56,6 +55,7 @@ const SCRIPTS: &[(Definition, Script)] = &[
 fn main() -> anyhow::Result<()> {
     // TODO(rg): shell is not always needed (e.g. font_size)
     let shell = Shell::new()?;
+    let atlas = SystemAtlas::new();
 
     let matches = command!()
         .subcommand_required(true)
@@ -77,7 +77,7 @@ fn main() -> anyhow::Result<()> {
         .unwrap()
         .1;
 
-    script(&shell, subcmd_args)?;
+    script(&shell, subcmd_args, &atlas)?;
 
     Ok(())
 }

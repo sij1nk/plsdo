@@ -5,7 +5,10 @@ use std::str::FromStr;
 use serde_json::Value;
 use xshell::{cmd, Shell};
 
-use crate::util::{determine_wm, dmenu, WM};
+use crate::{
+    system_atlas::SystemAtlas,
+    util::{determine_wm, dmenu, WM},
+};
 
 fn get_layout_names(sh: &Shell, wm: WM) -> anyhow::Result<Vec<String>> {
     match wm {
@@ -56,7 +59,7 @@ fn set_layout(sh: &Shell, layout_index: usize, wm: WM) -> anyhow::Result<()> {
     }
 }
 
-pub fn run(sh: &Shell, _: &ArgMatches) -> anyhow::Result<()> {
+pub fn run(sh: &Shell, _: &ArgMatches, _: &SystemAtlas) -> anyhow::Result<()> {
     let wm = determine_wm();
     let layout_names = get_layout_names(sh, wm)?;
 
