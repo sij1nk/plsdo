@@ -1,39 +1,11 @@
 use anyhow::anyhow;
 use clap::ArgMatches;
-use std::{str::FromStr, fs::File, io::Read};
+use std::str::FromStr;
 
-use serde::Deserialize;
 use serde_json::Value;
 use xshell::{cmd, Shell};
 
-use crate::util::{dmenu, determine_wm, WM};
-
-#[derive(Debug, Deserialize)]
-struct RiverLayoutDefinition {
-    name: String,
-    label: String,
-    variant: String,
-    options: String,
-    layout: String
-}
-
-#[derive(Debug, Deserialize)]
-struct RiverConfig {
-    layouts: Vec<RiverLayoutDefinition>
-}
-
-fn read_river_layouts() -> anyhow::Result<Vec<RiverLayoutDefinition>> {
-    let mut path = dirs::home_dir().unwrap();
-    path.push(".dotfiles/config/river/layouts.toml");
-
-    let mut file = File::open(&path)?;
-    let mut contents = String::new();
-    let _ = file.read_to_string(&mut contents)?;
-
-    let config: RiverConfig = toml::from_str(&contents)?;
-
-    Ok(config.layouts)
-}
+use crate::util::{determine_wm, dmenu, WM};
 
 fn get_layout_names(sh: &Shell, wm: WM) -> anyhow::Result<Vec<String>> {
     match wm {
@@ -57,33 +29,18 @@ fn get_layout_names(sh: &Shell, wm: WM) -> anyhow::Result<Vec<String>> {
                             None
                         }
                     })
-                .collect::<Vec<_>>();
+                    .collect::<Vec<_>>();
 
                 Ok(layout_names)
             } else {
                 Err(anyhow!(
-                        "Expected a list of accepted keyboard layouts, got something else"
+                    "Expected a list of accepted keyboard layouts, got something else"
                 ))
             }
-        },
-        WM::River => {
-            let layout_names = read_river_layouts()?
-                .iter()
-                .enumerate()
-                .map(|(i, def)| {
-                    let mut s = String::new();
-                    s.push_str(&i.to_string());
-                    s.push(':');
-                    s.push(' ');
-                    s.push_str(&def.name);
-                    s
-                }).collect::<Vec<_>>();
-            Ok(layout_names)
-        },
-        _ => todo!()
+        }
+        _ => todo!(),
     }
 }
-
 
 fn set_layout(sh: &Shell, layout_index: usize, wm: WM) -> anyhow::Result<()> {
     match wm {
@@ -94,28 +51,14 @@ fn set_layout(sh: &Shell, layout_index: usize, wm: WM) -> anyhow::Result<()> {
                 .run()?;
 
             Ok(())
-        },
-        WM::River => {
-            let layouts = read_river_layouts()?;
-            let chosen = &layouts[layout_index];
-
-            let variant = &chosen.variant;
-            let options = &chosen.options;
-            let layout = &chosen.layout;
-            cmd!(sh, "riverctl keyboard-layout -variant {variant} -options {options} {layout}")
-                .quiet()
-                .run()?;
-
-            Ok(())
-        },
-        _ => todo!()
+        }
+        _ => todo!(),
     }
 }
 
 pub fn run(sh: &Shell, _: &ArgMatches) -> anyhow::Result<()> {
     let wm = determine_wm();
     let layout_names = get_layout_names(sh, wm)?;
-
 
     // unwrap: don't want to continue if string is empty
     let result_index_str = dmenu(sh, "Choose keyboard layout", &layout_names, true).unwrap();

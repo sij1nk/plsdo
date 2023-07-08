@@ -1,54 +1,68 @@
 #![allow(dead_code)]
 
-use std::str::Split;
-use std::io::{BufReader, BufWriter, Read, Write };
-use std::fs::{File, OpenOptions};
 use std::env;
+use std::fs::{File, OpenOptions};
+use std::io::{BufReader, BufWriter, Read, Write};
 
 use xshell::{cmd, Shell};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum WM {
+    Hyprland,
     Sway,
-    River,
-    X11
+    X11,
 }
 
 pub fn determine_wm() -> WM {
     if let Some(value) = env::vars()
         .find(|(k, _)| k == "XDG_CURRENT_DESKTOP")
-            .map(|(_, v)| v) {
-                match value.as_str() {
-                    "sway" => WM::Sway,
-                    "river" => WM::River,
-                    _ => WM::X11
-                }
+        .map(|(_, v)| v)
+    {
+        match value.as_str() {
+            "sway" => WM::Sway,
+            "Hyprland" => WM::Hyprland,
+            _ => WM::X11,
+        }
     } else {
         WM::X11
     }
 }
 
 fn dmenu_inner_x11(sh: &Shell, prompt: &str, choices_joined: &str) -> anyhow::Result<String> {
-    Ok(cmd!(sh, "dmenu -p {prompt} -i -l 10 -fn 'monospace:size=24'")
-        .stdin(choices_joined)
-        .read()?)
+    Ok(
+        cmd!(sh, "dmenu -p {prompt} -i -l 10 -fn 'monospace:size=24'")
+            .stdin(choices_joined)
+            .read()?,
+    )
 }
 
-pub fn dmenu<T>(sh: &Shell, prompt: &str, choices: &[T], forbid_invalid: bool) -> anyhow::Result<String> 
-where T: AsRef<str> {
-    let choices_joined = choices.iter().map(|c| c.as_ref()).collect::<Vec<_>>().join("\n");
+pub fn dmenu<T>(
+    sh: &Shell,
+    prompt: &str,
+    choices: &[T],
+    forbid_invalid: bool,
+) -> anyhow::Result<String>
+where
+    T: AsRef<str>,
+{
+    let choices_joined = choices
+        .iter()
+        .map(|c| c.as_ref())
+        .collect::<Vec<_>>()
+        .join("\n");
 
-    let chosen = if let Some((_, session_type)) = std::env::vars().find(|(k, _)| k == "XDG_SESSION_TYPE") {
-        if session_type == "wayland" {
-            cmd!(sh, "wofi -d --prompt {prompt}")
-                .stdin(&choices_joined)
-                .read()?
+    let chosen =
+        if let Some((_, session_type)) = std::env::vars().find(|(k, _)| k == "XDG_SESSION_TYPE") {
+            if session_type == "wayland" {
+                cmd!(sh, "wofi -d --prompt {prompt}")
+                    .stdin(&choices_joined)
+                    .read()?
+            } else {
+                dmenu_inner_x11(sh, prompt, &choices_joined)?
+            }
         } else {
             dmenu_inner_x11(sh, prompt, &choices_joined)?
-        }
-    } else {
-        dmenu_inner_x11(sh, prompt, &choices_joined)?
-    };
+        };
 
     if forbid_invalid && !choices_joined.contains(&chosen) {
         return Err(anyhow::anyhow!("Invalid input given"));
@@ -58,7 +72,8 @@ where T: AsRef<str> {
 }
 
 pub fn modify_file<F>(path_from_home: &str, splitter: &str, modifier: F) -> anyhow::Result<()>
-    where F: FnOnce(&mut Split<char>, &mut BufWriter<&File>) -> anyhow::Result<()>
+where
+    F: FnOnce(&mut LinesWithEndings, &mut BufWriter<&File>) -> anyhow::Result<()>,
 {
     // unwrap: we don't want to continue if home doesn't exist
     let mut path = dirs::home_dir().unwrap();
@@ -66,7 +81,8 @@ pub fn modify_file<F>(path_from_home: &str, splitter: &str, modifier: F) -> anyh
 
     path.push(path_from_home);
 
-    let file_name = path.file_name()
+    let file_name = path
+        .file_name()
         .ok_or_else(|| anyhow::anyhow!("Given path is not pointing to a file"))?
         .to_str()
         .ok_or_else(|| anyhow::anyhow!("File name is not valid UTF-8"))?;
@@ -87,16 +103,18 @@ pub fn modify_file<F>(path_from_home: &str, splitter: &str, modifier: F) -> anyh
     let mut contents = String::new();
     reader.read_to_string(&mut contents)?;
 
-    let (before, after) = contents.split_once(splitter).ok_or_else(|| anyhow::anyhow!("Could not find splitter string"))?;
+    let (before, after) = contents
+        .split_once(splitter)
+        .ok_or_else(|| anyhow::anyhow!("Could not find splitter string"))?;
 
-    let mut after_lines = after.split('\n');
+    let mut after_lines = after.into();
 
     writer.write_all(before.as_bytes())?;
     writer.write_all(splitter.as_bytes())?;
 
     modifier(&mut after_lines, &mut writer)?;
 
-    let rest = after_lines.intersperse("\n").collect::<String>();
+    let rest = after_lines.collect::<String>();
 
     writer.write_all(rest.as_bytes())?;
     writer.flush()?;
@@ -111,6 +129,34 @@ pub fn trim_sides(s: &str) -> &str {
     chars.next();
     chars.next_back();
     chars.as_str()
+}
+
+pub struct LinesWithEndings<'a> {
+    input: &'a str,
+}
+
+impl<'a> From<&'a str> for LinesWithEndings<'a> {
+    fn from(input: &'a str) -> Self {
+        Self { input }
+    }
+}
+
+impl<'a> Iterator for LinesWithEndings<'a> {
+    type Item = &'a str;
+
+    fn next(&mut self) -> Option<&'a str> {
+        if self.input.is_empty() {
+            return None;
+        }
+        let split = self
+            .input
+            .find('\n')
+            .map(|i| i + 1)
+            .unwrap_or(self.input.len());
+        let (line, rest) = self.input.split_at(split);
+        self.input = rest;
+        Some(line)
+    }
 }
 
 #[cfg(test)]

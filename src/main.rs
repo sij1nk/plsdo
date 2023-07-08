@@ -1,12 +1,10 @@
-#![feature(iter_intersperse)]
-
 use clap::{command, ArgMatches, Command};
 use xshell::Shell;
 
 type Definition = (
-    &'static str,
-    &'static str,
-    Option<fn(Command<'static>) -> Command<'static>>,
+    &'static str,                                     // name
+    &'static str,                                     // description
+    Option<fn(Command<'static>) -> Command<'static>>, // command extension
 );
 type Script = fn(&Shell, &ArgMatches) -> anyhow::Result<()>;
 
@@ -35,16 +33,24 @@ const SCRIPTS: &[(Definition, Script)] = &[
     ),
     (
         ("font_family", "Change the font family", None),
-        scripts::font_family::run
+        scripts::font_family::run,
     ),
     (
-        ("playerctl", "Control media players", Some(scripts::playerctl::command)),
+        (
+            "playerctl",
+            "Control media players",
+            Some(scripts::playerctl::command),
+        ),
         scripts::playerctl::run,
     ),
     (
-        ("game", "Launch a game through Lutris", Some(scripts::game::command)),
-        scripts::game::run
-    )
+        (
+            "game",
+            "Launch a game through Lutris",
+            Some(scripts::game::command),
+        ),
+        scripts::game::run,
+    ),
 ];
 
 fn main() -> anyhow::Result<()> {

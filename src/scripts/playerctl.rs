@@ -102,6 +102,8 @@ fn invoke_player_command(sh: &Shell, player: &str, command: PlayerCommand) -> an
 fn show_status(player: &str) {
     if player == "spotify" {
         println!("spotify playing some shit");
+    } else if player == "firefox" {
+        println!("firefox playing some shit");
     } else {
         println!("mpd or something else playing some shit");
     }
