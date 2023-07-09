@@ -116,6 +116,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "define_scripts_macro"
+version = "0.1.0"
+dependencies = [
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "dirs"
 version = "4.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -252,6 +260,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "define_scripts_macro",
  "dirs",
  "lazy_static",
  "serde",
@@ -288,9 +297,9 @@ dependencies = [
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.44"
+version = "1.0.64"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7bd7356a8122b6c4a24a82b278680c73357984ca2fc79a0f9fa6dea7dced7c58"
+checksum = "78803b62cbf1f46fde80d7c0e803111524b9877184cfe7c3033659490ac7a7da"
 dependencies = [
  "unicode-ident",
 ]

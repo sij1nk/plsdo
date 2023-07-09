@@ -1,4 +1,4 @@
-use clap::ArgMatches;
+use clap::{ArgMatches, Command};
 use std::str::FromStr;
 use std::string::ToString;
 use strum::IntoEnumIterator;
@@ -27,6 +27,10 @@ impl PowerMenuOption {
 
         Ok(())
     }
+}
+
+pub fn command(cmd: Command<'static>) -> Command<'static> {
+    cmd
 }
 
 pub fn run(sh: &Shell, _: &ArgMatches, _: &SystemAtlas) -> anyhow::Result<()> {

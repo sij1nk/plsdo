@@ -4,8 +4,12 @@ use crate::{
 };
 use std::io::Write;
 
-use clap::ArgMatches;
+use clap::{ArgMatches, Command};
 use xshell::Shell;
+
+pub fn command(cmd: Command<'static>) -> Command<'static> {
+    cmd
+}
 
 pub fn run(sh: &Shell, _: &ArgMatches, atlas: &SystemAtlas) -> anyhow::Result<()> {
     util::modify_file(

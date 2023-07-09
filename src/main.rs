@@ -1,11 +1,12 @@
 use clap::{command, ArgMatches, Command};
+use define_scripts_macro::define_scripts;
 use system_atlas::SystemAtlas;
 use xshell::Shell;
 
 type Definition = (
-    &'static str,                                     // name
-    &'static str,                                     // description
-    Option<fn(Command<'static>) -> Command<'static>>, // command extension
+    &'static str,                             // name
+    &'static str,                             // description
+    fn(Command<'static>) -> Command<'static>, // command extension
 );
 type Script = fn(&Shell, &ArgMatches, &SystemAtlas) -> anyhow::Result<()>;
 
@@ -13,44 +14,14 @@ mod scripts;
 mod system_atlas;
 mod util;
 
-const SCRIPTS: &[(Definition, Script)] = &[
-    (
-        ("power", "Shut down, reboot or suspend the machine", None),
-        scripts::power::run,
-    ),
-    (
-        ("keyboard_layout", "Change the keyboard layout", None),
-        scripts::keyboard_layout::run,
-    ),
-    (
-        (
-            "font_size",
-            "Change the font size",
-            Some(scripts::font_size::command),
-        ),
-        scripts::font_size::run,
-    ),
-    (
-        ("font_family", "Change the font family", None),
-        scripts::font_family::run,
-    ),
-    (
-        (
-            "playerctl",
-            "Control media players",
-            Some(scripts::playerctl::command),
-        ),
-        scripts::playerctl::run,
-    ),
-    (
-        (
-            "game",
-            "Launch a game through Lutris",
-            Some(scripts::game::command),
-        ),
-        scripts::game::run,
-    ),
-];
+define_scripts!([
+    (power, "Shut down, reboot or suspend the machine"),
+    (keyboard_layout, "Change the keyboard layout"),
+    (font_size, "Change the font size"),
+    (font_family, "Change the font family"),
+    (playerctl, "Control media players"),
+    (game, "Launch a game through Lutris")
+]);
 
 fn main() -> anyhow::Result<()> {
     // TODO(rg): shell is not always needed (e.g. font_size)
@@ -61,11 +32,7 @@ fn main() -> anyhow::Result<()> {
         .subcommand_required(true)
         .subcommands(SCRIPTS.iter().map(|&((name, about, args), _)| {
             let base_command = Command::new(name).about(about);
-            if let Some(args) = args {
-                args(base_command)
-            } else {
-                base_command
-            }
+            args(base_command)
         }))
         .get_matches();
 

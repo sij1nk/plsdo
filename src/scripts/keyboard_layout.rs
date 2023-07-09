@@ -1,5 +1,5 @@
 use anyhow::anyhow;
-use clap::ArgMatches;
+use clap::{ArgMatches, Command};
 use std::str::FromStr;
 
 use serde_json::Value;
@@ -57,6 +57,10 @@ fn set_layout(sh: &Shell, layout_index: usize, wm: WM) -> anyhow::Result<()> {
         }
         _ => todo!(),
     }
+}
+
+pub fn command(cmd: Command<'static>) -> Command<'static> {
+    cmd
 }
 
 pub fn run(sh: &Shell, _: &ArgMatches, _: &SystemAtlas) -> anyhow::Result<()> {
