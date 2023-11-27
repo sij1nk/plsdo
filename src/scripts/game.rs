@@ -27,7 +27,7 @@ pub fn run(sh: &Shell, args: &ArgMatches, _: &SystemAtlas) -> anyhow::Result<()>
     // game should be launched directly
     if filtered_choices.len() == 1 {
         result = filtered_choices.remove(0);
-    } else if filtered_choices.len() == 0 {
+    } else if filtered_choices.is_empty() {
         result = dmenu(
             sh,
             &format!("Choose game (no matches found for '{search}')"),

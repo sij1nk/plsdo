@@ -59,7 +59,7 @@ where
                 cmd!(sh, "wofi -d --prompt {prompt}")
                     .stdin(&choices_joined)
                     .read()
-                    .map_err(|e| anyhow::Error::new(e))
+                    .map_err(anyhow::Error::new)
             } else {
                 dmenu_inner_x11(sh, prompt, &choices_joined)
             }
@@ -82,7 +82,7 @@ where
 {
     // unwrap: we don't want to continue if home doesn't exist
     let path = Path::new(path);
-    let mut temp_path = path.clone().to_path_buf();
+    let mut temp_path = path.to_path_buf();
 
     let file_name = path
         .file_name()
@@ -93,7 +93,7 @@ where
     temp_path.push(".cache");
     temp_path.push(file_name.to_string() + ".plsdo");
 
-    let file = File::open(&path)?;
+    let file = File::open(path)?;
     let mut reader = BufReader::new(&file);
 
     let temp_file = OpenOptions::new()
