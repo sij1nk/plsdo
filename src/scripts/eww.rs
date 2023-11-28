@@ -21,7 +21,25 @@ trait Widget<T> {
     fn read_value(&self) -> T;
 }
 
-struct Brightness;
+struct Brightness {
+    min_value: f32,
+    max_value: f32,
+    status_filename: String,
+    pid_filename: String,
+}
+
+impl Brightness {
+    fn new() -> Self {
+        Self {
+            min_value: 0.0,
+            max_value: 1.0,
+            status_filename: String::from("/tmp/eww-brightness"),
+            pid_filename: String::from("/tmp/eww-brightness.pid"),
+        }
+    }
+
+    fn initialize() {}
+}
 
 impl Widget<f32> for Brightness {
     fn get_severity(value: &f32) -> Option<Severity> {
@@ -70,27 +88,12 @@ fn init_brightness(path: &str, value: u32) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn init_gamma(path: &str, value: u32) -> anyhow::Result<()> {
-    Ok(())
-}
-
-fn init_volume(path: &str, value: u32) -> anyhow::Result<()> {
-    Ok(())
-}
-
-fn init_show_all(path: &str, value: bool) -> anyhow::Result<()> {
-    Ok(())
-}
-
 pub fn command(cmd: Command<'static>) -> Command<'static> {
     cmd
 }
 
 pub fn run(sh: &Shell, args: &ArgMatches, atlas: &SystemAtlas) -> anyhow::Result<()> {
     init_brightness(atlas.eww_brightness, 100)?;
-    init_gamma(atlas.eww_gamma, 4200)?;
-    init_volume(atlas.eww_volume, 20)?;
-    init_show_all(atlas.eww_show_all, false)?;
 
     Ok(())
 }

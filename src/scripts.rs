@@ -1,3 +1,4 @@
+pub mod brightness;
 pub mod eww;
 pub mod font_family;
 pub mod font_size;
