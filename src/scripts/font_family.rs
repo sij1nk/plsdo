@@ -7,7 +7,7 @@ use std::io::Write;
 use clap::{ArgMatches, Command};
 use xshell::Shell;
 
-pub fn command(cmd: Command<'static>) -> Command<'static> {
+pub fn command(cmd: Command) -> Command {
     cmd
 }
 

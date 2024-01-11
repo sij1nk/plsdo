@@ -82,7 +82,7 @@ fn init_show_all(path: &str, value: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn command(cmd: Command<'static>) -> Command<'static> {
+pub fn command(cmd: Command) -> Command {
     cmd
 }
 

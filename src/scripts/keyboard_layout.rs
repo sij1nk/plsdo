@@ -59,7 +59,7 @@ fn set_layout(sh: &Shell, layout_index: usize, wm: WM) -> anyhow::Result<()> {
     }
 }
 
-pub fn command(cmd: Command<'static>) -> Command<'static> {
+pub fn command(cmd: Command) -> Command {
     cmd
 }
 

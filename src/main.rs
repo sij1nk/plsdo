@@ -7,7 +7,7 @@ use xshell::Shell;
 type Definition = (
     &'static str,                             // name
     &'static str,                             // description
-    fn(Command<'static>) -> Command<'static>, // command extension
+    fn(Command) -> Command, // command extension
 );
 type Script = fn(&Shell, &ArgMatches, &SystemAtlas) -> anyhow::Result<()>;
 
