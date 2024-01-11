@@ -121,7 +121,7 @@ fn show_status(player: &str) {
     }
 }
 
-pub fn command(cmd: Command) -> Command {
+pub fn command_extension(cmd: Command) -> Command {
     PlayerCommand::augment_subcommands(cmd)
 }
 

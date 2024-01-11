@@ -3,7 +3,7 @@ use xshell::{cmd, Shell};
 
 use crate::{system_atlas::SystemAtlas, util::dmenu};
 
-pub fn command(cmd: Command) -> Command {
+pub fn command_extension(cmd: Command) -> Command {
     cmd.arg(arg!([GAME]))
 }
 

@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-define_scripts_macro = { path = "define_scripts_macro" }
+define_subcommands_macro = { path = "define_subcommands_macro" }
 xshell = "0.2"
 anyhow = { version = "1.0", features = ["backtrace"]}
 serde_json = "1.0"
