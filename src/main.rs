@@ -30,7 +30,8 @@ define_scripts!([
     (font_family, "Change the font family"),
     (playerctl, "Control media players"),
     (game, "Launch a game through Lutris"),
-    (eww, "Manage the eww daemon and eww widgets")
+    (eww, "Manage the eww daemon and eww widgets"),
+    (brightness, "Adjust the screen brightness")
 ]);
 
 fn main() -> anyhow::Result<()> {
