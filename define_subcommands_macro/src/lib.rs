@@ -38,7 +38,7 @@ impl Parse for Input {
 }
 
 #[proc_macro]
-pub fn define_scripts(tokens: TokenStream) -> TokenStream {
+pub fn define_subcommands(tokens: TokenStream) -> TokenStream {
     let input = parse_macro_input!(tokens as Input);
     let definitions = input.definitions;
 
@@ -46,11 +46,11 @@ pub fn define_scripts(tokens: TokenStream) -> TokenStream {
     let descriptions = definitions.iter().map(|d| d.description.clone());
 
     let expanded = quote! {
-        const SCRIPTS: &[(Definition, Script)] = &[
+        const SUBCOMMANDS: &[(Definition, Script)] = &[
             #(
                 (
-                    (stringify!(#names), #descriptions, scripts::#names::command),
-                    scripts::#names::run
+                    (stringify!(#names), #descriptions, subcommands::#names::command_extension),
+                    subcommands::#names::run
                 ),
             )*
         ];

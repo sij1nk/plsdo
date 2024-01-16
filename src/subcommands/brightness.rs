@@ -12,12 +12,7 @@ enum Direction {
     Down,
 }
 
-// TODO:
-// init default value
-// create file with default value
-pub fn init() {}
-
-pub fn command(cmd: Command<'static>) -> Command<'static> {
+pub fn command_extension(cmd: Command) -> Command {
     cmd.arg(
         arg!(-d --direction <DIRECTION>)
             .value_parser(value_parser!(Direction))

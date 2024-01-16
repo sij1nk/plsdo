@@ -29,7 +29,7 @@ impl PowerMenuOption {
     }
 }
 
-pub fn command(cmd: Command<'static>) -> Command<'static> {
+pub fn command_extension(cmd: Command) -> Command {
     cmd
 }
 

@@ -9,7 +9,7 @@ enum Direction {
     Down,
 }
 
-pub fn command(cmd: Command<'static>) -> Command<'static> {
+pub fn command_extension(cmd: Command) -> Command {
     cmd.arg(
         arg!(-d --direction <DIRECTION>)
             .value_parser(value_parser!(Direction))

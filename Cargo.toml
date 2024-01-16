@@ -6,16 +6,15 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+define_subcommands_macro = { path = "define_subcommands_macro" }
 xshell = "0.2"
 anyhow = { version = "1.0", features = ["backtrace"]}
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"]}
 strum = "0.24"
 strum_macros = "0.24"
-clap = { version = "3", features = ["cargo", "derive"]}
+clap = { version = "4", features = ["cargo", "derive"]}
 dirs = "4"
-lazy_static = "1.4.0"
-toml = "0.7.2"
-define_scripts_macro = { path = "define_scripts_macro" }
+toml = "0.8"
 hyprland = "0.3.7"
 dbus = "0.9.7"
