@@ -29,7 +29,6 @@ define_subcommands!([
     (font_family, "Change the font family"),
     (playerctl, "Control media players"),
     (game, "Launch a game through Lutris"),
-    (eww, "Manage the eww daemon and eww widgets")
 ]);
 
 fn main() -> anyhow::Result<()> {
