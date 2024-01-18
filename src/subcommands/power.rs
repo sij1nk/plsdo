@@ -5,7 +5,7 @@ use strum::IntoEnumIterator;
 use strum_macros::{Display, EnumIter, EnumString};
 use xshell::{cmd, Shell};
 
-use crate::{system_atlas::SystemAtlas, util::dmenu};
+use crate::util::dmenu;
 
 #[derive(Debug, Display, EnumString, EnumIter)]
 #[strum(serialize_all = "lowercase")]
@@ -33,7 +33,7 @@ pub fn command_extension(cmd: Command) -> Command {
     cmd
 }
 
-pub fn run(sh: &Shell, _: &ArgMatches, _: &SystemAtlas) -> anyhow::Result<()> {
+pub fn run(sh: &Shell, _: &ArgMatches) -> anyhow::Result<()> {
     let opts: Vec<_> = PowerMenuOption::iter().map(|opt| opt.to_string()).collect();
 
     let result = dmenu(sh, "Choose operation", &opts, true)?;

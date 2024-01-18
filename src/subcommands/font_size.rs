@@ -1,4 +1,4 @@
-use crate::{system_atlas::SystemAtlas, util};
+use crate::{system_atlas::SYSTEM_ATLAS, util};
 use clap::{arg, value_parser, ArgMatches, Command, ValueEnum};
 use std::io::Write;
 use xshell::Shell;
@@ -22,13 +22,13 @@ pub fn command_extension(cmd: Command) -> Command {
     )
 }
 
-pub fn run(_sh: &Shell, args: &ArgMatches, atlas: &SystemAtlas) -> anyhow::Result<()> {
+pub fn run(_sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
     let dir = args.get_one::<Direction>("direction");
 
     // unwrap: argument is required
     let delta = args.get_one::<i32>("DELTA").unwrap();
 
-    util::modify_file(atlas.alacritty, "# Point size\n", |lines, writer| {
+    util::modify_file(SYSTEM_ATLAS.alacritty, "# Point size\n", |lines, writer| {
         let previous_value_line = lines
             .next()
             .ok_or_else(|| anyhow::anyhow!("Line containing previous value not found"))?;

@@ -1,18 +1,12 @@
 use clap::{ArgMatches, Command};
-use std::str::FromStr;
 
-use xshell::{cmd, Shell};
+use xshell::Shell;
 
-use crate::{
-    system_atlas::SystemAtlas,
-    util::{determine_wm, dmenu, WM},
-};
+use crate::util::{determine_wm, dmenu, WM};
 
 fn get_layout_names_hyprland(sh: &Shell) -> anyhow::Result<Vec<String>> {
     // The hyprland library does not allow us to query the list of registered keyboard layouts, and
     // we cannot do it through the hyprctl cli either - we have to parse the config file
-    let hyprland_config_file = format!("{}/hypr", env!("XDG_CONFIG_HOME"))
-
 }
 
 fn get_layout_names(sh: &Shell, wm: WM) -> anyhow::Result<Vec<String>> {
@@ -34,7 +28,7 @@ fn print_layout_names(layout_names: &[String]) {
     }
 }
 
-pub fn run(sh: &Shell, _: &ArgMatches, _: &SystemAtlas) -> anyhow::Result<()> {
+pub fn run(sh: &Shell, _: &ArgMatches) -> anyhow::Result<()> {
     let wm = determine_wm();
     let layout_names = get_layout_names(sh, wm)?;
 

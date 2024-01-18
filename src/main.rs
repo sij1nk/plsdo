@@ -1,6 +1,5 @@
 use clap::{command, ArgMatches, Command};
 use define_subcommands_macro::define_subcommands;
-use system_atlas::SystemAtlas;
 use xshell::Shell;
 
 mod subcommands;
@@ -12,7 +11,7 @@ type Definition = (
     &'static str,           // description
     fn(Command) -> Command, // command extension
 );
-type Script = fn(&Shell, &ArgMatches, &SystemAtlas) -> anyhow::Result<()>;
+type Script = fn(&Shell, &ArgMatches) -> anyhow::Result<()>;
 
 // Each plsdo subcommand can be invoked as a subcommand on the plsdo command. Subcommands are
 // expected to live under the `subcommands` folder, and must provide implementations for the `run`
@@ -29,7 +28,6 @@ define_subcommands!([
 
 fn main() -> anyhow::Result<()> {
     let shell = Shell::new()?;
-    let atlas = SystemAtlas::new();
 
     let matches = command!()
         .subcommand_required(true)
@@ -53,7 +51,7 @@ otherwise clap exits before getting this far",
         .expect("A valid subcommand name is supplied; otherwise clap exits")
         .1;
 
-    subcommand(&shell, subcmd_args, &atlas)?;
+    subcommand(&shell, subcmd_args)?;
 
     Ok(())
 }

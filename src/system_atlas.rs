@@ -7,15 +7,11 @@ pub struct SystemAtlas<'a> {
     pub eww_workspaces: &'a str,
 }
 
-impl<'a> SystemAtlas<'a> {
-    pub fn new() -> Self {
-        Self {
-            alacritty: "~/.config/alacritty/alacritty.yaml",
-            fontconfig: "~/.config/fontconfig/fonts.conf",
-            eww_brightness: "/tmp/eww-brightness",
-            eww_gamma: "/tmp/eww-gamma",
-            eww_volume: "/tmp/eww-volume",
-            eww_workspaces: "/tmp/eww-workspaces",
-        }
-    }
-}
+pub const SYSTEM_ATLAS: SystemAtlas = SystemAtlas {
+    alacritty: "~/.config/alacritty/alacritty.yaml",
+    fontconfig: "~/.config/fontconfig/fonts.conf",
+    eww_brightness: "/tmp/eww-brightness",
+    eww_gamma: "/tmp/eww-gamma",
+    eww_volume: "/tmp/eww-volume",
+    eww_workspaces: "/tmp/eww-workspaces",
+};
