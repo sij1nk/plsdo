@@ -11,8 +11,7 @@ use xshell::{cmd, Shell};
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum WM {
     Hyprland,
-    Sway,
-    X11,
+    GenericX11,
 }
 
 pub fn determine_wm() -> WM {
@@ -21,12 +20,11 @@ pub fn determine_wm() -> WM {
         .map(|(_, v)| v)
     {
         match value.as_str() {
-            "sway" => WM::Sway,
             "Hyprland" => WM::Hyprland,
-            _ => WM::X11,
+            _ => WM::GenericX11,
         }
     } else {
-        WM::X11
+        WM::GenericX11
     }
 }
 
@@ -127,13 +125,6 @@ where
     Ok(())
 }
 
-pub fn trim_sides(s: &str) -> &str {
-    let mut chars = s.chars();
-    chars.next();
-    chars.next_back();
-    chars.as_str()
-}
-
 pub struct LinesWithEndings<'a> {
     input: &'a str,
 }
@@ -159,22 +150,5 @@ impl<'a> Iterator for LinesWithEndings<'a> {
         let (line, rest) = self.input.split_at(split);
         self.input = rest;
         Some(line)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn trim_sides_works() {
-        let s = "\"Hello world\"";
-        assert_eq!(trim_sides(s), "Hello world");
-    }
-
-    #[test]
-    fn trim_sides_works_on_empty_string() {
-        let s = "";
-        assert_eq!(trim_sides(s), "");
     }
 }

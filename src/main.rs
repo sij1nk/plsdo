@@ -3,7 +3,10 @@ use define_subcommands_macro::define_subcommands;
 use system_atlas::SystemAtlas;
 use xshell::Shell;
 
-/// TODO: unused
+mod subcommands;
+mod system_atlas;
+mod util;
+
 type Definition = (
     &'static str,           // name
     &'static str,           // description
@@ -11,17 +14,10 @@ type Definition = (
 );
 type Script = fn(&Shell, &ArgMatches, &SystemAtlas) -> anyhow::Result<()>;
 
-mod subcommands;
-mod system_atlas;
-mod util;
-
-// Each plsdo script can be invoked as a subcommand on the plsdo command.
-// Scripts are expected to live under the `scripts` folder, and must provide implementations for
-// the `run` and `command` functions.
-//
-// TODO: consider turning scripts into struct which implement a trait that defines the signatures
-// for `run` and `command`. Right now, it's unclear what signatures they're supposed to have,
-// unless we read the macro definition
+// Each plsdo subcommand can be invoked as a subcommand on the plsdo command. Subcommands are
+// expected to live under the `subcommands` folder, and must provide implementations for the `run`
+// and `command_extension` functions.
+// TODO: more flexibility may be needed later (e.g. subcommands broken into multiple source files)
 define_subcommands!([
     (power, "Shut down, reboot or suspend the machine"),
     (keyboard_layout, "Change the keyboard layout"),
@@ -47,15 +43,17 @@ fn main() -> anyhow::Result<()> {
         )
         .get_matches();
 
-    let (subcmd_name, subcmd_args) = matches.subcommand().unwrap();
-    // TODO: unwrap
-    let script = SUBCOMMANDS
+    let (subcmd_name, subcmd_args) = matches.subcommand().expect(
+        "A subcommand is always received;
+otherwise clap exits before getting this far",
+    );
+    let subcommand = SUBCOMMANDS
         .iter()
         .find(|&&((name, _, _), _)| name == subcmd_name)
-        .unwrap()
+        .expect("A valid subcommand name is supplied; otherwise clap exits")
         .1;
 
-    script(&shell, subcmd_args, &atlas)?;
+    subcommand(&shell, subcmd_args, &atlas)?;
 
     Ok(())
 }
