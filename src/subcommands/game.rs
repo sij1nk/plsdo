@@ -1,13 +1,13 @@
 use clap::{arg, ArgMatches, Command};
 use xshell::{cmd, Shell};
 
-use crate::{system_atlas::SystemAtlas, util::dmenu};
+use crate::util::dmenu;
 
 pub fn command_extension(cmd: Command) -> Command {
     cmd.arg(arg!([GAME]))
 }
 
-pub fn run(sh: &Shell, args: &ArgMatches, _: &SystemAtlas) -> anyhow::Result<()> {
+pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
     let list_output = cmd!(sh, "lutris -l").ignore_stderr().read()?;
     let mut choices = list_output
         .split('\n')

@@ -1,12 +1,9 @@
 use clap::{ArgMatches, Command};
 use std::str::FromStr;
 
-use xshell::{cmd, Shell};
+use xshell::Shell;
 
-use crate::{
-    system_atlas::SystemAtlas,
-    util::{determine_wm, dmenu, WM},
-};
+use crate::util::{determine_wm, dmenu, WM};
 
 fn get_layout_names(sh: &Shell, wm: WM) -> anyhow::Result<Vec<String>> {
     unimplemented!()
@@ -20,7 +17,7 @@ pub fn command_extension(cmd: Command) -> Command {
     cmd
 }
 
-pub fn run(sh: &Shell, _: &ArgMatches, _: &SystemAtlas) -> anyhow::Result<()> {
+pub fn run(sh: &Shell, _: &ArgMatches) -> anyhow::Result<()> {
     let wm = determine_wm();
     let layout_names = get_layout_names(sh, wm)?;
 

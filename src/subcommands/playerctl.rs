@@ -7,7 +7,7 @@ use std::{
 use clap::{ArgMatches, Command, FromArgMatches, Parser, Subcommand};
 use xshell::{cmd, Shell};
 
-use crate::{system_atlas::SystemAtlas, util::dmenu};
+use crate::util::dmenu;
 
 // TODO:
 // - show-status:
@@ -125,7 +125,7 @@ pub fn command_extension(cmd: Command) -> Command {
     PlayerCommand::augment_subcommands(cmd)
 }
 
-pub fn run(sh: &Shell, args: &ArgMatches, _: &SystemAtlas) -> anyhow::Result<()> {
+pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
     // TODO: unwrap
     let subcmd = PlayerCommand::from_arg_matches(args)
         .map_err(|err| err.exit())

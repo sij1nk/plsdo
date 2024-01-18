@@ -1,5 +1,5 @@
 use crate::{
-    system_atlas::SystemAtlas,
+    system_atlas::SYSTEM_ATLAS,
     util::{self, dmenu},
 };
 use std::io::Write;
@@ -11,9 +11,9 @@ pub fn command_extension(cmd: Command) -> Command {
     cmd
 }
 
-pub fn run(sh: &Shell, _: &ArgMatches, atlas: &SystemAtlas) -> anyhow::Result<()> {
+pub fn run(sh: &Shell, _: &ArgMatches) -> anyhow::Result<()> {
     util::modify_file(
-        atlas.fontconfig,
+        SYSTEM_ATLAS.fontconfig,
         "<family>monospace</family>\n",
         |lines, writer| {
             let mut font_families = Vec::new();
@@ -37,7 +37,7 @@ pub fn run(sh: &Shell, _: &ArgMatches, atlas: &SystemAtlas) -> anyhow::Result<()
             // unwrap: we don't want to continue if the string is empty
             let chosen = dmenu(sh, "Choose font family", &font_families, true).unwrap();
 
-            util::modify_file(atlas.alacritty, "font:\n", |lines, writer| {
+            util::modify_file(SYSTEM_ATLAS.alacritty, "font:\n", |lines, writer| {
                 for line in lines.by_ref() {
                     if line.trim().starts_with("family:") {
                         let _ = writer.write(b"    family: ")?;
