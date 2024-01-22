@@ -3,7 +3,13 @@ use std::{
     io::{BufRead, BufReader},
 };
 
-use clap::{ArgMatches, Command};
+use anyhow::anyhow;
+use clap::{arg, ArgMatches, Command};
+use hyprland::{
+    ctl::switch_xkb_layout::SwitchXKBLayoutCmdTypes,
+    data::{Devices, Keyboard},
+    shared::HyprData,
+};
 
 use xshell::Shell;
 
@@ -50,45 +56,109 @@ fn get_layout_names_hyprland() -> anyhow::Result<Vec<String>> {
     ))
 }
 
-fn get_layout_names(sh: &Shell, wm: WM) -> anyhow::Result<Vec<String>> {
+fn get_current_layout_name_hyprland() -> anyhow::Result<String> {
+    Ok(Devices::get()?
+        .keyboards
+        .first()
+        .ok_or(anyhow!("Could not find any connected keyboards"))?
+        .active_keymap
+        .clone())
+}
+
+fn select_next_layout_hyprland(keyboards: &[Keyboard]) -> anyhow::Result<()> {
+    for kb in keyboards {
+        hyprland::ctl::switch_xkb_layout::call(&kb.name, SwitchXKBLayoutCmdTypes::Next)?;
+    }
+    Ok(())
+}
+
+fn select_prev_layout_hyprland(keyboards: &[Keyboard]) -> anyhow::Result<()> {
+    for kb in keyboards {
+        hyprland::ctl::switch_xkb_layout::call(&kb.name, SwitchXKBLayoutCmdTypes::Previous)?;
+    }
+    Ok(())
+}
+
+fn set_layout_by_name_hyprland(
+    layouts: &[impl AsRef<str>],
+    keyboards: &[Keyboard],
+    name: &str,
+) -> anyhow::Result<()> {
+    let layout_id: u8 = layouts
+        .iter()
+        .enumerate()
+        .find(|(_, &ref layout_name)| layout_name.as_ref() == name)
+        .ok_or(anyhow!(
+            "The given layout name does not correspond to an existing layout"
+        ))?
+        .0
+        .try_into()?;
+
+    for kb in keyboards {
+        hyprland::ctl::switch_xkb_layout::call(&kb.name, SwitchXKBLayoutCmdTypes::Id(layout_id))?;
+    }
+    Ok(())
+}
+
+pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
+    let wm = determine_wm();
+
     match wm {
-        WM::Hyprland => get_layout_names_hyprland(),
-        _ => unimplemented!(),
+        WM::Hyprland => run_hyprland(sh, args),
+        WM::GenericX11 => run_x11(sh, args),
     }
 }
 
-fn set_layout(sh: &Shell, layout_index: usize, wm: WM) -> anyhow::Result<()> {
+fn run_hyprland(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
+    let keyboards = Devices::get()?.keyboards;
+
+    let changed_layout = match args.subcommand() {
+        Some(("next", _)) => {
+            select_next_layout_hyprland(&keyboards)?;
+            get_current_layout_name_hyprland().ok()
+        }
+        Some(("prev", _)) => {
+            select_prev_layout_hyprland(&keyboards)?;
+            get_current_layout_name_hyprland().ok()
+        }
+        Some(("choose", _)) => todo!(),
+        Some(("get", _)) => {
+            get_current_layout_name_hyprland()?;
+            None
+        }
+        Some(("set", set_args)) => {
+            let name = set_args
+                .get_one::<String>("NAME")
+                .expect("NAME should be a required argument");
+            let layouts = get_layout_names_hyprland()?;
+            set_layout_by_name_hyprland(&layouts, &keyboards, name)?;
+            get_current_layout_name_hyprland().ok()
+        }
+        _ => None,
+    };
+
+    if let Some(changed_layout) = changed_layout {
+        // TODO: notify the system bar (eww in our case)
+        println!("Layout is now {}", changed_layout);
+    }
+
+    Ok(())
+}
+
+fn run_x11(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
     unimplemented!()
 }
 
 pub fn command_extension(cmd: Command) -> Command {
-    cmd
-}
-
-fn print_layout_names(layout_names: &[String]) {
-    println!("Found keyboard layouts:");
-    for layout_name in layout_names {
-        println!("{}", layout_name);
-    }
-}
-
-pub fn run(sh: &Shell, _: &ArgMatches) -> anyhow::Result<()> {
-    let wm = determine_wm();
-    let layout_names = get_layout_names(sh, wm)?;
-
-    print_layout_names(&layout_names);
-
-    // unwrap: don't want to continue if string is empty
-    // let result_index_str = dmenu(sh, "Choose keyboard layout", &layout_names, true).unwrap();
-    //
-    // // unwrap: split always return at least 1 element
-    // let result_index_str = result_index_str.split(':').next().unwrap();
-    //
-    // let result_index = usize::from_str(result_index_str)?;
-    //
-    // set_layout(sh, result_index, wm)?;
-
-    // TODO: notify the system bar (eww in our case)
-
-    Ok(())
+    let inner_subcommands = vec![
+        Command::new("next").about("Select the next keyboard layout"),
+        Command::new("prev").about("Select the previous keyboard layout"),
+        Command::new("choose").about("Choose a keyboard layout from the list of layouts"),
+        Command::new("get").about("Get the current keyboard layout name"),
+        Command::new("set")
+            .about("Select the layout specified by name")
+            .arg(arg!([NAME] "Name of the keyboard layout").required(true)),
+    ];
+    cmd.subcommand_required(true)
+        .subcommands(inner_subcommands.iter())
 }
