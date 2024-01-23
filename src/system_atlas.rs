@@ -7,6 +7,7 @@ pub struct SystemAtlas<'a> {
     pub eww_gamma: &'a str,
     pub eww_volume: &'a str,
     pub eww_workspaces: &'a str,
+    pub eww_keyboard_layout: &'a str,
     pub hyprland: &'a str,
 }
 
@@ -17,5 +18,6 @@ pub const SYSTEM_ATLAS: SystemAtlas = SystemAtlas {
     eww_gamma: "/tmp/eww-gamma",
     eww_volume: "/tmp/eww-volume",
     eww_workspaces: "/tmp/eww-workspaces",
+    eww_keyboard_layout: "/tmp/eww-keyboard-layout",
     hyprland: "/home/rg/.config/hypr/hyprland.conf",
 };

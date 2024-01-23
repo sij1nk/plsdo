@@ -1,6 +1,6 @@
 use std::{
-    fs::File,
-    io::{BufRead, BufReader},
+    fs::{File, OpenOptions},
+    io::{BufRead, BufReader, LineWriter, Write},
 };
 
 use anyhow::anyhow;
@@ -56,46 +56,29 @@ fn get_layout_names_hyprland() -> anyhow::Result<Vec<String>> {
     ))
 }
 
-fn get_current_layout_name_hyprland() -> anyhow::Result<String> {
-    Ok(Devices::get()?
-        .keyboards
-        .first()
-        .ok_or(anyhow!("Could not find any connected keyboards"))?
-        .active_keymap
-        .clone())
+fn get_current_layout_id_hyprland() -> anyhow::Result<u8> {
+    let file = File::open(SYSTEM_ATLAS.eww_keyboard_layout)?;
+    let bufreader = BufReader::new(file);
+    let last_line = bufreader
+        .lines()
+        .last()
+        .ok_or(anyhow!("The file should not be empty"))??;
+
+    // Line format: json "[<id>,<name>]"
+    // Could parse the json, but it might be simpler to parse the line by hand
+    let (id_part, _) = last_line
+        .split_once(',')
+        .ok_or(anyhow!("Last line did not have the expected format"))?;
+    // Get rid of the opening bracket
+    let id_part = &id_part[1..];
+    let id = id_part.parse::<u8>()?;
+
+    Ok(id)
 }
 
-fn select_next_layout_hyprland(keyboards: &[Keyboard]) -> anyhow::Result<()> {
+fn set_layout_by_id_hyprland(keyboards: &[Keyboard], id: u8) -> anyhow::Result<()> {
     for kb in keyboards {
-        hyprland::ctl::switch_xkb_layout::call(&kb.name, SwitchXKBLayoutCmdTypes::Next)?;
-    }
-    Ok(())
-}
-
-fn select_prev_layout_hyprland(keyboards: &[Keyboard]) -> anyhow::Result<()> {
-    for kb in keyboards {
-        hyprland::ctl::switch_xkb_layout::call(&kb.name, SwitchXKBLayoutCmdTypes::Previous)?;
-    }
-    Ok(())
-}
-
-fn set_layout_by_name_hyprland(
-    layouts: &[impl AsRef<str>],
-    keyboards: &[Keyboard],
-    name: &str,
-) -> anyhow::Result<()> {
-    let layout_id: u8 = layouts
-        .iter()
-        .enumerate()
-        .find(|(_, &ref layout_name)| layout_name.as_ref() == name)
-        .ok_or(anyhow!(
-            "The given layout name does not correspond to an existing layout"
-        ))?
-        .0
-        .try_into()?;
-
-    for kb in keyboards {
-        hyprland::ctl::switch_xkb_layout::call(&kb.name, SwitchXKBLayoutCmdTypes::Id(layout_id))?;
+        hyprland::ctl::switch_xkb_layout::call(&kb.name, SwitchXKBLayoutCmdTypes::Id(id))?;
     }
     Ok(())
 }
@@ -109,37 +92,86 @@ pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
     }
 }
 
+fn lookup_keyboard_layout_id_by_name_hyprland(
+    layout_names: &[impl AsRef<str>],
+    name: &str,
+) -> anyhow::Result<u8> {
+    Ok(layout_names
+        .iter()
+        .enumerate()
+        .find(|(_, layout_name)| layout_name.as_ref() == name)
+        .ok_or(anyhow!(
+            "The given layout name does not correspond to an existing layout"
+        ))?
+        .0
+        .try_into()?)
+}
+
+fn lookup_keyboard_layout_name_by_id_hyprland(
+    layout_names: &[impl AsRef<str>],
+    id: u8,
+) -> anyhow::Result<String> {
+    Ok(layout_names
+        .get(id as usize)
+        .ok_or(anyhow!("Given layout id should be valid at this point"))?
+        .as_ref()
+        .to_owned())
+}
+
+fn write_layout_to_backing_file_hyprland(id: u8, name: &str) -> anyhow::Result<()> {
+    let file = OpenOptions::new()
+        .create(false)
+        .append(true)
+        .open(SYSTEM_ATLAS.eww_keyboard_layout)?;
+    let mut writer = LineWriter::new(&file);
+    write!(writer, "[{},\"{}\"]\n", id, name)?;
+
+    Ok(())
+}
+
 fn run_hyprland(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
     let keyboards = Devices::get()?.keyboards;
+    let layout_names = get_layout_names_hyprland()?;
 
-    let changed_layout = match args.subcommand() {
+    let changed_layout_id = match args.subcommand() {
         Some(("next", _)) => {
-            select_next_layout_hyprland(&keyboards)?;
-            get_current_layout_name_hyprland().ok()
+            let id = get_current_layout_id_hyprland()?;
+            let next = if id + 1 >= layout_names.len() as u8 {
+                0
+            } else {
+                id + 1
+            };
+            set_layout_by_id_hyprland(&keyboards, next)?;
+            Some(next)
         }
         Some(("prev", _)) => {
-            select_prev_layout_hyprland(&keyboards)?;
-            get_current_layout_name_hyprland().ok()
+            let id = get_current_layout_id_hyprland()?;
+            // This can overflow, but we're not gonna have more than 256 layouts...
+            let prev = id.checked_sub(1).unwrap_or(layout_names.len() as u8 - 1);
+            set_layout_by_id_hyprland(&keyboards, prev)?;
+            Some(prev)
         }
         Some(("choose", _)) => todo!(),
         Some(("get", _)) => {
-            get_current_layout_name_hyprland()?;
+            let id = get_current_layout_id_hyprland()?;
+            let name = lookup_keyboard_layout_name_by_id_hyprland(&layout_names, id)?;
+            println!("{name}");
             None
         }
         Some(("set", set_args)) => {
             let name = set_args
                 .get_one::<String>("NAME")
                 .expect("NAME should be a required argument");
-            let layouts = get_layout_names_hyprland()?;
-            set_layout_by_name_hyprland(&layouts, &keyboards, name)?;
-            get_current_layout_name_hyprland().ok()
+            let id = lookup_keyboard_layout_id_by_name_hyprland(&layout_names, &name)?;
+            set_layout_by_id_hyprland(&keyboards, id)?;
+            Some(id)
         }
         _ => None,
     };
 
-    if let Some(changed_layout) = changed_layout {
-        // TODO: notify the system bar (eww in our case)
-        println!("Layout is now {}", changed_layout);
+    if let Some(id) = changed_layout_id {
+        let name = lookup_keyboard_layout_name_by_id_hyprland(&layout_names, id)?;
+        write_layout_to_backing_file_hyprland(id, &name)?;
     }
 
     Ok(())
