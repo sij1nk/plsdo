@@ -25,7 +25,6 @@ use crate::{
 /// This is a _very_ naive implementation! I could make this more elaborate, but it would make
 /// more sense to contribute to the hyprland library instead.
 fn get_layout_names_hyprland() -> anyhow::Result<Vec<String>> {
-    println!("{}", SYSTEM_ATLAS.hyprland);
     let hyprland_config = File::open(SYSTEM_ATLAS.hyprland)?;
     let reader = BufReader::new(hyprland_config);
 
@@ -41,7 +40,7 @@ fn get_layout_names_hyprland() -> anyhow::Result<Vec<String>> {
 
         let Some((_, layouts)) = line_trimmed.split_once('=') else {
             // This is fine; maybe we found the word we're looking for in a comment
-            // (not very probable in this case though...)
+            // (not very probable in this case though...
             continue;
         };
 
@@ -56,6 +55,9 @@ fn get_layout_names_hyprland() -> anyhow::Result<Vec<String>> {
     ))
 }
 
+/// Get the current layout identifier number by reading the backing file of the eww keyboard-layout
+/// widget, which we maintain ourselves. This is the only way of determining the current layout id,
+/// other than maintaining a translation map between full layout+options+variant names and ids
 fn get_current_layout_id_hyprland() -> anyhow::Result<u8> {
     let file = File::open(SYSTEM_ATLAS.eww_keyboard_layout)?;
     let bufreader = BufReader::new(file);
@@ -118,6 +120,11 @@ fn lookup_keyboard_layout_name_by_id_hyprland(
         .to_owned())
 }
 
+/// We're appending to the end of the backing file - eww uses `tail -F` to read the last line,
+/// which might act wonkily if you truncate the file...
+/// We're building the json by hand because it's very simple to do.
+/// * `id`: id of the keyboard layout
+/// * `name`: short name of the keyboard layout
 fn write_layout_to_backing_file_hyprland(id: u8, name: &str) -> anyhow::Result<()> {
     let file = OpenOptions::new()
         .create(false)
@@ -151,7 +158,13 @@ fn run_hyprland(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
             set_layout_by_id_hyprland(&keyboards, prev)?;
             Some(prev)
         }
-        Some(("choose", _)) => todo!(),
+        Some(("choose", _)) => {
+            let chosen_layout_name = dmenu(sh, "Choose keyboard layout", &layout_names, true)?;
+            let id =
+                lookup_keyboard_layout_id_by_name_hyprland(&layout_names, &chosen_layout_name)?;
+            set_layout_by_id_hyprland(&keyboards, id)?;
+            Some(id)
+        }
         Some(("get", _)) => {
             let id = get_current_layout_id_hyprland()?;
             let name = lookup_keyboard_layout_name_by_id_hyprland(&layout_names, id)?;
