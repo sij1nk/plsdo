@@ -32,6 +32,7 @@ fn main() -> anyhow::Result<()> {
 
     let matches = command!()
         .subcommand_required(true)
+        .arg_required_else_help(true)
         .subcommands(
             SUBCOMMANDS
                 .iter()
