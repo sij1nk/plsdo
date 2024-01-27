@@ -486,8 +486,6 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 [[package]]
 name = "hyprland"
 version = "0.3.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dfa94ae7899f3f1bdcad21dcd50366a60f323375a25610889246f276d7f9fb06"
 dependencies = [
  "async-trait",
  "derive_more",
@@ -508,9 +506,7 @@ dependencies = [
 
 [[package]]
 name = "hyprland-macros"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c941d3d52e979612af8cb94e8de49000c7fada2014a7791d173ab41339f4e4eb"
+version = "0.3.12"
 dependencies = [
  "quote",
  "syn 2.0.48",

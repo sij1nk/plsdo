@@ -16,5 +16,5 @@ strum_macros = "0.24"
 clap = { version = "4", features = ["cargo", "derive"]}
 dirs = "4"
 toml = "0.8"
-hyprland = "0.3.7"
+hyprland = { path = "/home/rg/Repos/@rust/hyprland-rs" }
 gio = "0.18.4"

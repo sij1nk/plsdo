@@ -143,27 +143,33 @@ fn focus_workspace_by_id(id: WorkspaceId) -> anyhow::Result<()> {
 }
 
 fn focus_workspace(args: &ArgMatches) -> anyhow::Result<()> {
-    let dispatch = match args.subcommand() {
-        Some(("next", _)) => Some(DispatchType::Workspace(
-            hyprland::dispatch::WorkspaceIdentifierWithSpecial::RelativeMonitor(1),
-        )),
-        Some(("prev", _)) => Some(DispatchType::Workspace(
-            hyprland::dispatch::WorkspaceIdentifierWithSpecial::RelativeMonitor(-1),
-        )),
+    match args.subcommand() {
+        Some(("next", _)) => {
+            let dispatch = DispatchType::Workspace(
+                hyprland::dispatch::WorkspaceIdentifierWithSpecial::RelativeMonitorIncludingEmpty(
+                    1,
+                ),
+            );
+            Dispatch::call(dispatch)?;
+        }
+        Some(("prev", _)) => {
+            let dispatch = DispatchType::Workspace(
+                hyprland::dispatch::WorkspaceIdentifierWithSpecial::RelativeMonitorIncludingEmpty(
+                    -1,
+                ),
+            );
+            Dispatch::call(dispatch)?;
+        }
         Some(("id", id_args)) => {
             let id = id_args
                 .get_one::<WorkspaceId>("WORKSPACE")
                 .expect("WORKSPACE should be a required argument");
             focus_workspace_by_id(*id)?;
-            None
         }
-        _ => None,
+        _ => return Ok(()),
     };
 
-    if let Some(dispatch) = dispatch {
-        Dispatch::call(dispatch)?;
-        write_workspace_state_to_backing_file()?;
-    }
+    write_workspace_state_to_backing_file()?;
 
     Ok(())
 }
