@@ -39,9 +39,19 @@ pub fn command_extension(cmd: Command) -> Command {
             .subcommands(
                 vec![
                     Command::new("next")
-                        .about("Move focus to the next workspace on the current monitor"),
+                        .about("Move focus to the next workspace on the current monitor")
+                        .arg_required_else_help(true)
+                        .arg(
+                            arg!([MONITOR] "Identifier of the monitor")
+                                .value_parser(value_parser!(u8)),
+                        ),
                     Command::new("prev")
-                        .about("Move focus to the previous workspace on the current monitor"),
+                        .about("Move focus to the previous workspace on the current monitor")
+                        .arg_required_else_help(true)
+                        .arg(
+                            arg!([MONITOR] "Identifier of the monitor")
+                                .value_parser(value_parser!(u8)),
+                        ),
                     Command::new("id")
                         .about("Move focus to the workspace with the given identifier")
                         .arg_required_else_help(true)
@@ -99,12 +109,9 @@ impl Display for OccupiedWorkspaceIds {
     }
 }
 
-/// Append the state of the workspaces to a file, from which the eww workspaces widget can read it
-/// from. The output should be the following JSON array:
-/// `[<active_primary_workspace>,<active_secondary_workspace>,[<occupied_workspace>...]]`
-/// Odd numbered workspaces belong to the primary monitor; even numbered workspaces belong to the
-/// secondary one.
-fn write_workspace_state_to_backing_file() -> anyhow::Result<()> {
+/// Get the active workspace ids for the primary and secondary monitor.
+/// This assumes that exactly 2 monitors are connected.
+fn get_active_workspace_ids() -> anyhow::Result<(WorkspaceId, WorkspaceId)> {
     let mut active_workspace_ids = Monitors::get()?
         .map(|mon| mon.active_workspace.id)
         .collect::<Vec<_>>();
@@ -115,6 +122,24 @@ fn write_workspace_state_to_backing_file() -> anyhow::Result<()> {
             std::cmp::Ordering::Greater
         }
     });
+
+    let primary = active_workspace_ids
+        .first()
+        .ok_or(anyhow::anyhow!("Found no active workspaces, expected two"))?;
+    let secondary = active_workspace_ids.get(1).ok_or(anyhow::anyhow!(
+        "Only found one active workspace, expected two"
+    ))?;
+
+    Ok((*primary, *secondary))
+}
+
+/// Append the state of the workspaces to a file, from which the eww workspaces widget can read it
+/// from. The output should be the following JSON array:
+/// `[<active_primary_workspace>,<active_secondary_workspace>,[<occupied_workspace>...]]`
+/// Odd numbered workspaces belong to the primary monitor; even numbered workspaces belong to the
+/// secondary one.
+fn write_workspace_state_to_backing_file() -> anyhow::Result<()> {
+    let (primary_active_id, secondary_active_id) = get_active_workspace_ids()?;
 
     let occupied_workspace_ids = Clients::get()?
         .map(|cl| cl.workspace.id)
@@ -129,7 +154,7 @@ fn write_workspace_state_to_backing_file() -> anyhow::Result<()> {
     writeln!(
         writer,
         "[{},{},[{}]]",
-        active_workspace_ids[0], active_workspace_ids[1], occupied_workspace_ids
+        primary_active_id, secondary_active_id, occupied_workspace_ids
     )?;
 
     Ok(())
@@ -142,21 +167,53 @@ fn focus_workspace_by_id(id: WorkspaceId) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Get the next/prev workspace's id on the given monitor.
+/// This impl assumes a couple things:
+/// - number of total workspaces is 10
+/// - primary monitor has all the odd numbered workspaces
+/// - secondary monitor has all the even numbered workspaces
+/// * `monitor_id`: the id of the monitor on which we change the workspace
+/// * `delta`: how much to increase the current workspace id by
+fn get_relative_workspace_id_on_monitor(
+    monitor_id: u8,
+    delta: WorkspaceId,
+) -> anyhow::Result<WorkspaceId> {
+    let workspace_count = 10;
+    let (primary_active_id, secondary_active_id) = get_active_workspace_ids()?;
+    let workspace_id = if monitor_id == 0 {
+        primary_active_id
+    } else {
+        secondary_active_id
+    };
+
+    let mut next_workspace_id = workspace_id + delta;
+    if next_workspace_id <= 0 {
+        next_workspace_id = workspace_count + next_workspace_id
+    } else if next_workspace_id > workspace_count {
+        next_workspace_id -= workspace_count;
+    }
+    Ok(next_workspace_id)
+}
+
 fn focus_workspace(args: &ArgMatches) -> anyhow::Result<()> {
     match args.subcommand() {
-        Some(("next", _)) => {
+        Some(("next", next_args)) => {
+            let monitor_id = next_args
+                .get_one::<u8>("MONITOR")
+                .expect("MONITOR should be a required argument");
+            let workspace_id = get_relative_workspace_id_on_monitor(*monitor_id, 2)?;
             let dispatch = DispatchType::Workspace(
-                hyprland::dispatch::WorkspaceIdentifierWithSpecial::RelativeMonitorIncludingEmpty(
-                    1,
-                ),
+                hyprland::dispatch::WorkspaceIdentifierWithSpecial::Id(workspace_id),
             );
             Dispatch::call(dispatch)?;
         }
-        Some(("prev", _)) => {
+        Some(("prev", prev_args)) => {
+            let monitor_id = prev_args
+                .get_one::<u8>("MONITOR")
+                .expect("MONITOR should be a required argument");
+            let workspace_id = get_relative_workspace_id_on_monitor(*monitor_id, -2)?;
             let dispatch = DispatchType::Workspace(
-                hyprland::dispatch::WorkspaceIdentifierWithSpecial::RelativeMonitorIncludingEmpty(
-                    -1,
-                ),
+                hyprland::dispatch::WorkspaceIdentifierWithSpecial::Id(workspace_id),
             );
             Dispatch::call(dispatch)?;
         }
