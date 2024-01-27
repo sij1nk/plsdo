@@ -1,6 +1,12 @@
-use std::{collections::BTreeSet, fmt::Display, fs::OpenOptions, io::LineWriter, io::Write};
+use std::{
+    collections::BTreeSet,
+    fmt::Display,
+    fs::OpenOptions,
+    io::{LineWriter, Write},
+};
 
 use clap::{arg, value_parser, ArgMatches, Command};
+use gio::{prelude::AppInfoExt, AppInfo, AppLaunchContext};
 use hyprland::{
     data::{Clients, Monitors},
     dispatch::{Dispatch, DispatchType},
@@ -9,6 +15,20 @@ use hyprland::{
 use xshell::Shell;
 
 use crate::system_atlas::SYSTEM_ATLAS;
+
+/// A program whose window is pinned to a specific workspace. The window should always be opened on
+/// this workspace, but can be freely moved to other workspaces afterwards. Opening the pinned
+/// program again would not launch a new instance of the program - instead, it would navigate to
+/// the workspace where the first instance's window is.
+/// The program *must* have a desktop entry associated with it
+/// * `name`: value of the `Name` field in the desktop entry
+/// * `wm_class`: the WM class of the window
+/// * `workspace`: the id of workspace on which the pinned program's window is opened by default
+struct PinnedProgram<'a> {
+    name: &'a str,
+    wm_class: &'a str,
+    workspace_id: WorkspaceId,
+}
 
 pub fn command_extension(cmd: Command) -> Command {
     let inner_subcommands = vec![
@@ -19,17 +39,16 @@ pub fn command_extension(cmd: Command) -> Command {
             .subcommands(
                 vec![
                     Command::new("next")
-                        .about("Move focus to the next workspace on the monitor")
-                        .arg_required_else_help(true)
-                        .arg(arg!([MONITOR] "Identifier of the monitor")),
+                        .about("Move focus to the next workspace on the current monitor"),
                     Command::new("prev")
-                        .about("Move focus to the previous workspace on the monitor")
-                        .arg_required_else_help(true)
-                        .arg(arg!([MONITOR] "Identifier of the monitor")),
+                        .about("Move focus to the previous workspace on the current monitor"),
                     Command::new("id")
                         .about("Move focus to the workspace with the given identifier")
                         .arg_required_else_help(true)
-                        .arg(arg!([WORKSPACE] "Identifier of the workspace")),
+                        .arg(
+                            arg!([WORKSPACE] "Identifier of the workspace")
+                                .value_parser(value_parser!(WorkspaceId)),
+                        ),
                 ]
                 .iter(),
             ),
@@ -107,22 +126,45 @@ fn write_workspace_state_to_backing_file() -> anyhow::Result<()> {
         .append(true)
         .open(SYSTEM_ATLAS.eww_workspaces)?;
     let mut writer = LineWriter::new(&file);
-    write!(
+    writeln!(
         writer,
-        "[{},{},[{}]]\n",
+        "[{},{},[{}]]",
         active_workspace_ids[0], active_workspace_ids[1], occupied_workspace_ids
     )?;
 
     Ok(())
 }
 
+fn focus_workspace_by_id(id: WorkspaceId) -> anyhow::Result<()> {
+    let dispatch =
+        DispatchType::Workspace(hyprland::dispatch::WorkspaceIdentifierWithSpecial::Id(id));
+    Dispatch::call(dispatch)?;
+    Ok(())
+}
+
 fn focus_workspace(args: &ArgMatches) -> anyhow::Result<()> {
-    match args.subcommand() {
-        Some(("next", _)) => {}
-        Some(("prev", _)) => {}
-        Some(("id", _)) => {}
-        _ => {}
+    let dispatch = match args.subcommand() {
+        Some(("next", _)) => Some(DispatchType::Workspace(
+            hyprland::dispatch::WorkspaceIdentifierWithSpecial::RelativeMonitor(1),
+        )),
+        Some(("prev", _)) => Some(DispatchType::Workspace(
+            hyprland::dispatch::WorkspaceIdentifierWithSpecial::RelativeMonitor(-1),
+        )),
+        Some(("id", id_args)) => {
+            let id = id_args
+                .get_one::<WorkspaceId>("WORKSPACE")
+                .expect("WORKSPACE should be a required argument");
+            focus_workspace_by_id(*id)?;
+            None
+        }
+        _ => None,
+    };
+
+    if let Some(dispatch) = dispatch {
+        Dispatch::call(dispatch)?;
+        write_workspace_state_to_backing_file()?;
     }
+
     Ok(())
 }
 
@@ -135,10 +177,74 @@ fn move_to_workspace(args: &ArgMatches) -> anyhow::Result<()> {
         hyprland::dispatch::WorkspaceIdentifier::Id(*id),
     );
 
-    Ok(Dispatch::call(dispatch)?)
+    Dispatch::call(dispatch)?;
+
+    write_workspace_state_to_backing_file()?;
+
+    Ok(())
 }
 
 fn open_pinned(args: &ArgMatches) -> anyhow::Result<()> {
+    let program_name = args
+        .get_one::<String>("PROGRAM")
+        .expect("PROGRAM should be a required argument");
+
+    let pinned_programs = vec![
+        PinnedProgram {
+            name: "ncmpcpp",
+            wm_class: "ncmpcpp",
+            workspace_id: 6,
+        },
+        PinnedProgram {
+            name: "btop",
+            wm_class: "btop",
+            workspace_id: 7,
+        },
+        PinnedProgram {
+            name: "pulsemixer",
+            wm_class: "pulsemixer",
+            workspace_id: 7,
+        },
+        PinnedProgram {
+            name: "Firefox Web Browser",
+            wm_class: "firefox",
+            workspace_id: 10,
+        },
+    ];
+
+    let Some(pinned_program) = pinned_programs
+        .iter()
+        .find(|program| program.name == program_name)
+    else {
+        return Err(anyhow::anyhow!(
+            "The program '{}' is not a pinned program",
+            program_name
+        ));
+    };
+
+    if let Some(already_running_program) =
+        Clients::get()?.find(|cl| cl.class == pinned_program.wm_class)
+    {
+        let workspace_id = already_running_program.workspace.id;
+        focus_workspace_by_id(workspace_id)?;
+    } else {
+        let appinfos = AppInfo::all();
+        let Some(appinfo) = appinfos
+            .iter()
+            .find(|appinfo| appinfo.name() == pinned_program.name)
+        else {
+            return Err(anyhow::anyhow!(
+                "Could not find desktop entry for the pinned program '{}'",
+                pinned_program.name
+            ));
+        };
+
+        focus_workspace_by_id(pinned_program.workspace_id)?;
+        appinfo.launch(&[], AppLaunchContext::NONE)?;
+    };
+
+    write_workspace_state_to_backing_file()?;
+
     Ok(())
 }
 

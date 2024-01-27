@@ -17,3 +17,4 @@ clap = { version = "4", features = ["cargo", "derive"]}
 dirs = "4"
 toml = "0.8"
 hyprland = "0.3.7"
+gio = "0.18.4"
