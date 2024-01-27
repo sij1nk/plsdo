@@ -131,7 +131,7 @@ fn write_layout_to_backing_file_hyprland(id: u8, name: &str) -> anyhow::Result<(
         .append(true)
         .open(SYSTEM_ATLAS.eww_keyboard_layout)?;
     let mut writer = LineWriter::new(&file);
-    write!(writer, "[{},\"{}\"]\n", id, name)?;
+    writeln!(writer, "[{},\"{}\"]", id, name)?;
 
     Ok(())
 }
@@ -175,7 +175,7 @@ fn run_hyprland(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
             let name = set_args
                 .get_one::<String>("NAME")
                 .expect("NAME should be a required argument");
-            let id = lookup_keyboard_layout_id_by_name_hyprland(&layout_names, &name)?;
+            let id = lookup_keyboard_layout_id_by_name_hyprland(&layout_names, name)?;
             set_layout_by_id_hyprland(&keyboards, id)?;
             Some(id)
         }
@@ -190,7 +190,7 @@ fn run_hyprland(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn run_x11(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
+fn run_x11(_sh: &Shell, _args: &ArgMatches) -> anyhow::Result<()> {
     unimplemented!()
 }
 
