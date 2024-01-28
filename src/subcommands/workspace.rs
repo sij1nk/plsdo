@@ -236,8 +236,9 @@ fn move_to_workspace(args: &ArgMatches) -> anyhow::Result<()> {
         .get_one::<WorkspaceId>("WORKSPACE")
         .expect("WORKSPACE should be a required argument");
 
-    let dispatch = DispatchType::MoveFocusedWindowToWorkspace(
-        hyprland::dispatch::WorkspaceIdentifier::Id(*id),
+    let dispatch = DispatchType::MoveToWorkspace(
+        hyprland::dispatch::WorkspaceIdentifierWithSpecial::Id(*id),
+        None,
     );
 
     Dispatch::call(dispatch)?;
