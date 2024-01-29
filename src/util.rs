@@ -14,6 +14,13 @@ pub enum WM {
     GenericX11,
 }
 
+pub enum ValueTier {
+    None,
+    Low,
+    Medium,
+    High,
+}
+
 pub fn determine_wm() -> WM {
     if let Some(value) = env::vars()
         .find(|(k, _)| k == "XDG_CURRENT_DESKTOP")

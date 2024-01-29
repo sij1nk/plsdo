@@ -25,6 +25,7 @@ define_subcommands!([
     (playerctl, "Control media players"),
     (game, "Launch a game through Lutris"),
     (workspace, "Manage desktop workspaces"),
+    (brightness, "Adjust the screen brightness")
 ]);
 
 fn main() -> anyhow::Result<()> {
