@@ -255,6 +255,16 @@ fn open_pinned(args: &ArgMatches) -> anyhow::Result<()> {
 
     let pinned_programs = vec![
         PinnedProgram {
+            name: "newsboat",
+            wm_class: "newsboat",
+            workspace_id: 5,
+        },
+        PinnedProgram {
+            name: "ncmpcpp",
+            wm_class: "ncmpcpp",
+            workspace_id: 6,
+        },
+        PinnedProgram {
             name: "ncmpcpp",
             wm_class: "ncmpcpp",
             workspace_id: 6,
