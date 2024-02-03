@@ -188,7 +188,7 @@ fn get_relative_workspace_id_on_monitor(
 
     let mut next_workspace_id = workspace_id + delta;
     if next_workspace_id <= 0 {
-        next_workspace_id = workspace_count + next_workspace_id
+        next_workspace_id += workspace_count
     } else if next_workspace_id > workspace_count {
         next_workspace_id -= workspace_count;
     }
