@@ -26,7 +26,8 @@ define_subcommands!([
     (game, "Launch a game through Lutris"),
     (workspace, "Manage desktop workspaces"),
     (brightness, "Adjust the screen brightness"),
-    (colortemp, "Adjust the screen color temperature")
+    (colortemp, "Adjust the screen color temperature"),
+    (volume, "Adjust the audio volume")
 ]);
 
 fn main() -> anyhow::Result<()> {
