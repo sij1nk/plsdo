@@ -27,7 +27,8 @@ define_subcommands!([
     (workspace, "Manage desktop workspaces"),
     (brightness, "Adjust the screen brightness"),
     (colortemp, "Adjust the screen color temperature"),
-    (volume, "Adjust the audio volume")
+    (volume, "Adjust the audio volume"),
+    (ytdl, "Download videos using yt-dlp")
 ]);
 
 fn main() -> anyhow::Result<()> {
