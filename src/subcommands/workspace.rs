@@ -69,9 +69,36 @@ pub fn command_extension(cmd: Command) -> Command {
         Command::new("move")
             .about("Move focus and the current window to the specified workspace")
             .arg_required_else_help(true)
-            .arg(
-                arg!([WORKSPACE] "Identifier of the workspace")
-                    .value_parser(value_parser!(WorkspaceId)),
+            .subcommand_required(true)
+            .subcommands(
+                vec![
+                    Command::new("next")
+                        .about("Move focus and the current window to the next workspace on the specified monitor")
+                        .arg_required_else_help(true)
+                        .arg(
+                            arg!([MONITOR] "Identifier of the monitor")
+                                .value_parser(value_parser!(u8)),
+                        ),
+                    Command::new("next-current")
+                        .about("Move focus and the current window to the next workspace on the current monitor"),
+                    Command::new("prev")
+                        .about("Move focus and the current window to the previous workspace on the specified monitor")
+                        .arg_required_else_help(true)
+                        .arg(
+                            arg!([MONITOR] "Identifier of the monitor")
+                                .value_parser(value_parser!(u8)),
+                        ),
+                    Command::new("prev-current")
+                        .about("Move focus and the current window to the next workspace on the current monitor"),
+                    Command::new("id")
+                        .about("Move focus and the current window to the workspace with the given identifier")
+                        .arg_required_else_help(true)
+                        .arg(
+                            arg!([WORKSPACE] "Identifier of the workspace")
+                                .value_parser(value_parser!(WorkspaceId)),
+                        ),
+                ]
+                .iter(),
             ),
         Command::new("open_pinned")
             .about("Open and navigate to a pinned window")
@@ -218,24 +245,36 @@ fn get_active_monitor_id(sh: &Shell) -> anyhow::Result<u8> {
     Ok(monitor)
 }
 
-fn focus_workspace(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
+fn get_focus_workspace_dispatcher<'a>(
+    workspace_id: WorkspaceId,
+    move_window: bool,
+) -> DispatchType<'a> {
+    if move_window {
+        DispatchType::MoveToWorkspace(
+            hyprland::dispatch::WorkspaceIdentifierWithSpecial::Id(workspace_id),
+            None,
+        )
+    } else {
+        DispatchType::Workspace(hyprland::dispatch::WorkspaceIdentifierWithSpecial::Id(
+            workspace_id,
+        ))
+    }
+}
+
+fn focus_workspace(sh: &Shell, args: &ArgMatches, move_window: bool) -> anyhow::Result<()> {
     match args.subcommand() {
         Some(("next", next_args)) => {
             let monitor_id = next_args
                 .get_one::<u8>("MONITOR")
                 .expect("MONITOR should be a required argument");
             let workspace_id = get_relative_workspace_id_on_monitor(*monitor_id, 2)?;
-            let dispatch = DispatchType::Workspace(
-                hyprland::dispatch::WorkspaceIdentifierWithSpecial::Id(workspace_id),
-            );
+            let dispatch = get_focus_workspace_dispatcher(workspace_id, move_window);
             Dispatch::call(dispatch)?;
         }
         Some(("next-current", _)) => {
             let monitor_id = get_active_monitor_id(sh)?;
             let workspace_id = get_relative_workspace_id_on_monitor(monitor_id, 2)?;
-            let dispatch = DispatchType::Workspace(
-                hyprland::dispatch::WorkspaceIdentifierWithSpecial::Id(workspace_id),
-            );
+            let dispatch = get_focus_workspace_dispatcher(workspace_id, move_window);
             Dispatch::call(dispatch)?;
         }
         Some(("prev", prev_args)) => {
@@ -243,17 +282,13 @@ fn focus_workspace(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
                 .get_one::<u8>("MONITOR")
                 .expect("MONITOR should be a required argument");
             let workspace_id = get_relative_workspace_id_on_monitor(*monitor_id, -2)?;
-            let dispatch = DispatchType::Workspace(
-                hyprland::dispatch::WorkspaceIdentifierWithSpecial::Id(workspace_id),
-            );
+            let dispatch = get_focus_workspace_dispatcher(workspace_id, move_window);
             Dispatch::call(dispatch)?;
         }
         Some(("prev-current", _)) => {
             let monitor_id = get_active_monitor_id(sh)?;
             let workspace_id = get_relative_workspace_id_on_monitor(monitor_id, -2)?;
-            let dispatch = DispatchType::Workspace(
-                hyprland::dispatch::WorkspaceIdentifierWithSpecial::Id(workspace_id),
-            );
+            let dispatch = get_focus_workspace_dispatcher(workspace_id, move_window);
             Dispatch::call(dispatch)?;
         }
         Some(("id", id_args)) => {
@@ -264,23 +299,6 @@ fn focus_workspace(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
         }
         _ => return Ok(()),
     };
-
-    write_workspace_state_to_backing_file()?;
-
-    Ok(())
-}
-
-fn move_to_workspace(args: &ArgMatches) -> anyhow::Result<()> {
-    let id = args
-        .get_one::<WorkspaceId>("WORKSPACE")
-        .expect("WORKSPACE should be a required argument");
-
-    let dispatch = DispatchType::MoveToWorkspace(
-        hyprland::dispatch::WorkspaceIdentifierWithSpecial::Id(*id),
-        None,
-    );
-
-    Dispatch::call(dispatch)?;
 
     write_workspace_state_to_backing_file()?;
 
@@ -363,8 +381,8 @@ fn open_pinned(args: &ArgMatches) -> anyhow::Result<()> {
 
 pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
     match args.subcommand() {
-        Some(("focus", focus_args)) => focus_workspace(sh, focus_args),
-        Some(("move", move_args)) => move_to_workspace(move_args),
+        Some(("focus", focus_args)) => focus_workspace(sh, focus_args, false),
+        Some(("move", move_args)) => focus_workspace(sh, move_args, true),
         Some(("open_pinned", open_pinned_args)) => open_pinned(open_pinned_args),
         _ => Ok(()),
     }?;
