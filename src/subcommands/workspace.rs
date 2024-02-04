@@ -31,13 +31,13 @@ struct PinnedProgram<'a> {
 }
 
 pub fn command_extension(cmd: Command) -> Command {
-    let inner_subcommands = vec![
+    let inner_subcommands =[
         Command::new("focus")
             .about("Move focus to the specified workspace")
             .arg_required_else_help(true)
             .subcommand_required(true)
             .subcommands(
-                vec![
+                [
                     Command::new("next")
                         .about("Move focus to the next workspace on the specified monitor")
                         .arg_required_else_help(true)
@@ -71,7 +71,7 @@ pub fn command_extension(cmd: Command) -> Command {
             .arg_required_else_help(true)
             .subcommand_required(true)
             .subcommands(
-                vec![
+                [
                     Command::new("next")
                         .about("Move focus and the current window to the next workspace on the specified monitor")
                         .arg_required_else_help(true)
@@ -310,7 +310,7 @@ fn open_pinned(args: &ArgMatches) -> anyhow::Result<()> {
         .get_one::<String>("PROGRAM")
         .expect("PROGRAM should be a required argument");
 
-    let pinned_programs = vec![
+    let pinned_programs = [
         PinnedProgram {
             name: "newsboat",
             wm_class: "newsboat",

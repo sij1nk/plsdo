@@ -195,7 +195,7 @@ fn run_x11(_sh: &Shell, _args: &ArgMatches) -> anyhow::Result<()> {
 }
 
 pub fn command_extension(cmd: Command) -> Command {
-    let inner_subcommands = vec![
+    let inner_subcommands = [
         Command::new("next").about("Select the next keyboard layout"),
         Command::new("prev").about("Select the previous keyboard layout"),
         Command::new("choose").about("Choose a keyboard layout from the list of layouts"),

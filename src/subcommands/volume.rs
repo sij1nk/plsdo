@@ -20,7 +20,7 @@ enum Direction {
 const SINK: &str = "@DEFAULT_SINK@";
 
 pub fn command_extension(cmd: Command) -> Command {
-    let inner_subcommands = vec![
+    let inner_subcommands = [
         Command::new("set")
             .about("Set the audio volume")
             .arg(
