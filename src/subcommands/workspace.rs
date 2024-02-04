@@ -265,11 +265,6 @@ fn open_pinned(args: &ArgMatches) -> anyhow::Result<()> {
             workspace_id: 6,
         },
         PinnedProgram {
-            name: "ncmpcpp",
-            wm_class: "ncmpcpp",
-            workspace_id: 6,
-        },
-        PinnedProgram {
             name: "btop",
             wm_class: "btop",
             workspace_id: 7,
@@ -278,6 +273,11 @@ fn open_pinned(args: &ArgMatches) -> anyhow::Result<()> {
             name: "pulsemixer",
             wm_class: "pulsemixer",
             workspace_id: 7,
+        },
+        PinnedProgram {
+            name: "notes",
+            wm_class: "notes",
+            workspace_id: 8,
         },
         PinnedProgram {
             name: "Firefox Web Browser",
