@@ -295,7 +295,8 @@ fn focus_workspace(sh: &Shell, args: &ArgMatches, move_window: bool) -> anyhow::
             let id = id_args
                 .get_one::<WorkspaceId>("WORKSPACE")
                 .expect("WORKSPACE should be a required argument");
-            focus_workspace_by_id(*id)?;
+            let dispatch = get_focus_workspace_dispatcher(*id, move_window);
+            Dispatch::call(dispatch)?;
         }
         _ => return Ok(()),
     };
