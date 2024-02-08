@@ -5,6 +5,8 @@ use std::{
 };
 use xshell::{cmd, Shell};
 
+use crate::util::get_clipboard_contents;
+
 mod progress_server;
 
 struct DownloadProgress {
@@ -44,11 +46,11 @@ fn download(download_args: &ArgMatches) -> anyhow::Result<()> {
             let url_arg = url_args
                 .get_one::<String>("URL")
                 .expect("URL should be a required argument");
-            Some(url_arg.as_str())
+            Some(url_arg.clone())
         }
-        Some(("clipboard", clipboard_args)) => {
-            // TODO: read from top of clipboard
-            Some("https://www.youtube.com/watch?v=6IF5V6tv9LM")
+        Some(("clipboard", _)) => {
+            let string_from_clipboard = get_clipboard_contents()?;
+            Some(string_from_clipboard)
         }
         _ => None,
     };
@@ -60,16 +62,7 @@ fn download(download_args: &ArgMatches) -> anyhow::Result<()> {
     };
 
     let mut child = StdCommand::new("yt-dlp")
-        .args([
-            "-r",
-            "4096",
-            "-f",
-            "160",
-            // "-q",
-            "--progress",
-            "--newline",
-            url,
-        ])
+        .args(["-r", "4096", "-f", "160", "--progress", "--newline", &url])
         .stdout(Stdio::piped())
         .spawn()
         .expect("it to work");
