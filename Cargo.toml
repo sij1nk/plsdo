@@ -8,15 +8,16 @@ edition = "2021"
 [dependencies]
 define_subcommands_macro = { path = "define_subcommands_macro" }
 xshell = "0.2"
-anyhow = { version = "1.0", features = ["backtrace"]}
+anyhow = { version = "1.0", features = ["backtrace"] }
 serde_json = "1.0"
-serde = { version = "1.0", features = ["derive"]}
+serde = { version = "1.0", features = ["derive"] }
 strum = "0.24"
 strum_macros = "0.24"
-clap = { version = "4", features = ["cargo", "derive"]}
+clap = { version = "4", features = ["cargo", "derive"] }
 dirs = "4"
 toml = "0.8"
 hyprland = { git = "https://github.com/hyprland-community/hyprland-rs.git" }
 gio = "0.18.4"
 dbus = "0.9.7"
 fd-lock = "4.0.2"
+wl-clipboard-rs = "0.8.0"

@@ -22,7 +22,9 @@ enum Message {
 
 /// Launch a daemon process, which maintains a map of ongoing ytdl downloads
 pub fn run_progress_server() -> std::io::Result<()> {
-    let download_progresses: Arc<Mutex<BTreeMap<ProcessId, (DownloadMetadata, DownloadProgress)>>>;
+    let download_progress_map: Arc<
+        Mutex<BTreeMap<ProcessId, (DownloadMetadata, DownloadProgress)>>,
+    >;
     let listener = UnixListener::bind(SOCKET_PATH)?;
 
     for stream in listener.incoming() {

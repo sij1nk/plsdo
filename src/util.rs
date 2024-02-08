@@ -6,6 +6,7 @@ use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::Path;
 
 use anyhow::Context;
+use wl_clipboard_rs::paste::{get_contents, ClipboardType, Error, MimeType, Seat};
 use xshell::{cmd, Shell};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -19,6 +20,32 @@ pub enum ValueTier {
     Low,
     Medium,
     High,
+}
+
+pub fn get_clipboard_contents_wayland() -> anyhow::Result<String> {
+    let result = get_contents(ClipboardType::Regular, Seat::Unspecified, MimeType::Text);
+    match result {
+        Ok((mut pipe, _)) => {
+            let mut contents = vec![];
+            pipe.read_to_end(&mut contents)?;
+            Ok(String::from_utf8_lossy(&contents).to_string())
+        }
+        Err(Error::NoSeats) | Err(Error::ClipboardEmpty) | Err(Error::NoMimeType) => {
+            Ok(String::new())
+        }
+        Err(err) => Err(err.into()),
+    }
+}
+
+pub fn get_clipboard_contents_x11() -> anyhow::Result<String> {
+    unimplemented!()
+}
+
+pub fn get_clipboard_contents() -> anyhow::Result<String> {
+    match determine_wm() {
+        WM::Hyprland => get_clipboard_contents_wayland(),
+        WM::GenericX11 => get_clipboard_contents_x11(),
+    }
 }
 
 pub fn determine_wm() -> WM {
