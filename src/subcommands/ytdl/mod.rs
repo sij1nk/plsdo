@@ -22,6 +22,29 @@ struct DownloadMetadata {
     filename: String,
 }
 
+#[derive(Debug, Clone, Copy)]
+enum DownloadFormat {
+    UpTo1440p,
+    UpTo1080p,
+    UpTo480p,
+    WorstVideo,
+    AudioOnly,
+}
+
+fn get_download_format_specifier(format: DownloadFormat) -> &'static [&'static str] {
+    match format {
+        DownloadFormat::UpTo1440p => {
+            &["-f", "bestvideo[height<=1440]+bestaudio/best[height<=1440]"]
+        }
+        DownloadFormat::UpTo1080p => {
+            &["-f", "bestvideo[height<=1080]+bestaudio/best[height<=1080]"]
+        }
+        DownloadFormat::UpTo480p => &["-f", "bestvideo[height<=480]+bestaudio/best[height<=480]"],
+        DownloadFormat::WorstVideo => &["-S", "+size,+br,+res,+fps"],
+        DownloadFormat::AudioOnly => &["-x", "--audio-format", "mp3"],
+    }
+}
+
 pub fn command_extension(cmd: Command) -> Command {
     let inner_subcommands = [
         Command::new("download").about("Download a video or audio file")
