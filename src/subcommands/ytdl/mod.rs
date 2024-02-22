@@ -7,14 +7,8 @@ use xshell::{cmd, Shell};
 
 use crate::util::get_clipboard_contents;
 
-mod progress_server;
-
-struct DownloadProgress {
-    percent: u8,
-    total_size: u32,
-    download_speed: u32,
-    eta: u32, // TODO: format?
-}
+mod aggregator;
+mod message;
 
 struct DownloadMetadata {
     title: String,
@@ -26,6 +20,7 @@ struct DownloadMetadata {
 enum DownloadFormat {
     UpTo1440p,
     UpTo1080p,
+    UpTo720p,
     UpTo480p,
     WorstVideo,
     AudioOnly,
@@ -39,6 +34,7 @@ fn get_download_format_specifier(format: DownloadFormat) -> &'static [&'static s
         DownloadFormat::UpTo1080p => {
             &["-f", "bestvideo[height<=1080]+bestaudio/best[height<=1080]"]
         }
+        DownloadFormat::UpTo720p => &["-f", "bestvideo[height<=720]+bestaudio/best[height<=720]"],
         DownloadFormat::UpTo480p => &["-f", "bestvideo[height<=480]+bestaudio/best[height<=480]"],
         DownloadFormat::WorstVideo => &["-S", "+size,+br,+res,+fps"],
         DownloadFormat::AudioOnly => &["-x", "--audio-format", "mp3"],
@@ -63,29 +59,29 @@ pub fn command_extension(cmd: Command) -> Command {
         .subcommands(inner_subcommands.iter())
 }
 
-fn download(download_args: &ArgMatches) -> anyhow::Result<()> {
-    let url = match download_args.subcommand() {
+fn get_download_url(download_args: &ArgMatches) -> anyhow::Result<String> {
+    match download_args.subcommand() {
         Some(("url", url_args)) => {
             let url_arg = url_args
                 .get_one::<String>("URL")
                 .expect("URL should be a required argument");
-            Some(url_arg.clone())
+            Ok(url_arg.clone())
         }
         Some(("clipboard", _)) => {
             let string_from_clipboard = get_clipboard_contents()?;
-            Some(string_from_clipboard)
+            Ok(string_from_clipboard)
         }
-        _ => None,
-    };
+        _ => panic!("Missing required subcommand for 'download'"),
+    }
+}
 
-    let Some(url) = url else {
-        return Err(anyhow::anyhow!(
-            "Did not receive a valid URL to download a video from"
-        ));
-    };
+fn parse_ytdl_output_line(line: &str) {}
+
+fn download(download_args: &ArgMatches) -> anyhow::Result<()> {
+    let url = get_download_url(download_args)?;
 
     let mut child = StdCommand::new("yt-dlp")
-        .args(["-r", "4096", "-f", "160", "--progress", "--newline", &url])
+        .args(["-f", "160", "--progress", "--newline", &url])
         .stdout(Stdio::piped())
         .spawn()
         .expect("it to work");
@@ -106,7 +102,7 @@ fn download(download_args: &ArgMatches) -> anyhow::Result<()> {
 pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
     match args.subcommand() {
         Some(("download", download_args)) => download(download_args)?,
-        Some(("run_progress_server", _)) => progress_server::run_progress_server()?,
+        Some(("run_progress_server", _)) => aggregator::run()?,
         Some(("get_download_progress", _)) => {}
         _ => {}
     }
