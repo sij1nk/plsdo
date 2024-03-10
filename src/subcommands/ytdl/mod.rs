@@ -44,10 +44,12 @@ fn get_download_format_specifier(format: DownloadFormat) -> &'static [&'static s
 pub fn command_extension(cmd: Command) -> Command {
     let inner_subcommands = [
         Command::new("download").about("Download a video or audio file")
-        .arg_required_else_help(true)
+            .arg_required_else_help(true)
             .subcommand_required(true).subcommands(
                 [
-                    Command::new("url").about("Download a video or audio file from a given URL").arg_required_else_help(true).arg(arg!([URL] "The URL to download from")),
+                    Command::new("url").about("Download a video or audio file from a given URL")
+                        .arg_required_else_help(true)
+                        .arg(arg!([URL] "The URL to download from")),
                     Command::new("clipboard").about("Download a video or audio file, trying to interpret the clipboard contents as an URL")
                 ]
             ),
