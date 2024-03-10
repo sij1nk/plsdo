@@ -1,4 +1,6 @@
-use nom::{branch::alt, bytes::complete::tag, sequence::tuple, IResult};
+use nom::{
+    branch::alt, bytes::complete::tag, character::complete::multispace0, sequence::tuple, IResult,
+};
 use phf::phf_map;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -31,10 +33,7 @@ impl TryFrom<&str> for Message {
     }
 }
 
-static PARSER_PREFIXES: phf::Map<
-    &str,
-    for<'a> fn(&'a str) -> Result<Message, Box<dyn std::error::Error + 'a>>,
-> = phf_map! {
+static PARSER_PREFIXES: phf::Map<&str, for<'a> fn(&'a str) -> IResult<&'a str, Message>> = phf_map! {
     "[download]" => parse_download,
     "[youtube]" => parse_youtube,
     "[youtube:tab]" => parse_youtube_tab,
@@ -49,7 +48,7 @@ const ERROR_PREFIX: &str = "ERROR:";
 
 // TODO: Would be nice if we could get rid of this somehow
 // macro would possibly work and could be reusable in other parsing situations too
-fn parse_prefix<'a>(input: &'a str) -> IResult<&'a str, &'a str> {
+fn parse_prefix(input: &str) -> IResult<&str, &str> {
     alt((
         tag(YOUTUBE_PREFIX),
         tag(YOUTUBE_TAB_PREFIX),
@@ -58,36 +57,42 @@ fn parse_prefix<'a>(input: &'a str) -> IResult<&'a str, &'a str> {
     ))(input)
 }
 
-fn parse_youtube<'a>(input: &'a str) -> Result<Message, Box<dyn std::error::Error + 'a>> {
-    Ok(Message::PlaylistDownloadDone)
+fn parse_youtube(input: &str) -> IResult<&str, Message> {
+    Ok(("", Message::PlaylistDownloadDone))
 }
 
-fn parse_youtube_tab<'a>(input: &'a str) -> Result<Message, Box<dyn std::error::Error + 'a>> {
+fn parse_youtube_tab(input: &str) -> IResult<&str, Message> {
     let (remainder, word) = alt((
         tag::<&str, &str, nom::error::Error<&str>>("Extracting URL:"),
         tag("Playlist:"),
     ))(input)?;
-    Ok(Message::PlaylistDownloadDone)
+    Ok(("", Message::PlaylistDownloadDone))
 }
 
-fn parse_download<'a>(input: &'a str) -> Result<Message, Box<dyn std::error::Error + 'a>> {
-    Ok(Message::PlaylistDownloadDone)
-}
-fn parse_error<'a>(input: &'a str) -> Result<Message, Box<dyn std::error::Error + 'a>> {
-    Ok(Message::PlaylistDownloadDone)
+fn parse_download(input: &str) -> IResult<&str, Message> {
+    Ok(("", Message::PlaylistDownloadDone))
 }
 
-fn parse<'a>(input: &'a str) -> Result<Message, Box<dyn std::error::Error + 'a>> {
-    let (remainder, prefix) = parse_prefix(input)?;
+// "ERROR: [youtube] <video-id>: <error-message>" -> <error-message>
+fn parse_error(input: &str) -> IResult<&str, Message> {
+    let (remainder, _) = multispace0(input)?;
+    let (remainder, _) = tag("[youtube]")(input)?;
+    Ok(("", Message::PlaylistDownloadDone))
+}
 
-    if let Some(remainder_parser) = PARSER_PREFIXES
+fn parse(input: &str) -> anyhow::Result<Message> {
+    let (rem, prefix) = parse_prefix(input).map_err(|e| e.to_owned())?;
+
+    if let Some(rem_parser) = PARSER_PREFIXES
         .entries()
         .find(|(k, _)| k == &&prefix)
         .map(|(_, v)| v)
     {
-        remainder_parser(remainder)
+        rem_parser(rem)
+            .map(|rem| rem.1)
+            .map_err(|e| e.to_owned().into())
     } else {
-        Err(anyhow::anyhow!("Unexpected parser prefix: '{}'", prefix).into())
+        Err(anyhow::anyhow!("Unexpected parser prefix: '{}'", prefix))
     }
 }
 
@@ -96,7 +101,6 @@ mod tests {
     use crate::test_message_parsing;
 
     use super::*;
-    use nom::IResult;
 
     const VIDEO_URL: &str = "[youtube] Extracting URL: <video-url>";
     const VIDEO_DOWNLOAD_PATH: &str = "[download] Destination: <video-download-path>";
@@ -118,7 +122,7 @@ mod tests {
         assert!(parse_prefix(&s).is_ok());
 
         let s2 = "[Unrecognized prefix]";
-        assert!(parse_prefix(&s2).is_err());
+        assert!(parse_prefix(s2).is_err());
 
         Ok(())
     }
