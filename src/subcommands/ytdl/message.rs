@@ -78,73 +78,78 @@ fn parse_error<'a>(input: &'a str) -> Result<Message, Box<dyn std::error::Error 
 }
 
 fn parse<'a>(input: &'a str) -> Result<Message, Box<dyn std::error::Error + 'a>> {
-    let (remainder, word) = parse_prefix(input)?;
+    let (remainder, prefix) = parse_prefix(input)?;
 
-    // TODO: replace match with iteration over PARSER_PREFIXES + fallthrough for '_'
-
-    match word {
-        YOUTUBE_PREFIX => parse_youtube(remainder),
-        YOUTUBE_TAB_PREFIX => parse_youtube_tab(remainder),
-        DOWNLOAD_PREFIX => parse_download(remainder),
-        ERROR_PREFIX => Ok(Message::VideoDownloadError(remainder.to_owned())),
-        _ => Ok(Message::PlaylistDownloadDone),
+    if let Some(remainder_parser) = PARSER_PREFIXES
+        .entries()
+        .find(|(k, _)| k == &&prefix)
+        .map(|(_, v)| v)
+    {
+        remainder_parser(remainder)
+    } else {
+        Err(anyhow::anyhow!("Unexpected parser prefix: '{}'", prefix).into())
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::test_message_parsing;
+
     use super::*;
     use nom::IResult;
 
+    const VIDEO_URL: &str = "[youtube] Extracting URL: <video-url>";
+    const VIDEO_DOWNLOAD_PATH: &str = "[download] Destination: <video-download-path>";
+    const VIDEO_DOWNLOAD_PROGRESS: &str = "[download] 10% of 543.71KiB at 16.00KiB/s ETA 00:30";
+    const VIDEO_DOWNLOAD_DONE: &str =
+        "[download] 100% of <total-size> in <total-time> at <download-speed>";
+    const VIDEO_DOWNLOAD_ERROR: &str = "ERROR: [youtube] <video-id>: <error-message>";
+    const PLAYLIST_URL: &str = "[youtube:tab] Extracting URL: <playlist-url>";
+    const PLAYLIST_NAME: &str = "[download] Downloading playlist: <playlist-name>";
+    const PLAYLIST_VIDEO_COUNT: &str =
+        "[youtube:tab] Playlist <playlist-name>: Downloading 99 items of 99";
+    const PLAYLIST_VIDEO_INDEX: &str = "[download] Downloading item 11 of 99";
+    const PLAYLIST_DOWNLOAD_DONE: &str =
+        "[download] Finished downloading playlist: <playlist-name>";
+
     #[test]
-    fn nom_works() -> anyhow::Result<()> {
-        let video_url = "[youtube] Extracting URL: <video-url>";
-        let video_download_path = "[download] Destination: <video-download-path>";
-        let video_download_progress = "[download] 10% of 543.71KiB at 16.00KiB/s ETA 00:30";
-        let video_download_done =
-            "[download] 100% of <total-size> in <total-time> at <download-speed>";
-        let video_download_error = "ERROR: [youtube] <video-id>: <error-message>";
-        let playlist_url = "[youtube:tab] Extracting URL: <playlist-url>";
-        let playlist_name = "[download] Downloading playlist: <playlist-name>";
-        let playlist_video_count =
-            "[youtube:tab] Playlist <playlist-name>: Downloading 99 items of 99";
-        let playlist_video_index = "[download] Downloading item 11 of 99";
-        let playlist_download_done = "[download] Finished downloading playlist: <playlist-name>";
+    fn parse_prefix_works() -> anyhow::Result<()> {
+        let s = format!("{} yada yada", YOUTUBE_PREFIX);
+        assert!(parse_prefix(&s).is_ok());
 
-        let inputs_and_expected_results = [
-            (video_url, Message::VideoUrl("<video-url>".into())),
-            (
-                video_download_path,
-                Message::VideoDownloadPath("<video-download-path>".into()),
-            ),
-            (
-                video_download_progress,
-                Message::VideoDownloadProgress(DownloadProgress {
-                    percent: 10,
-                    total_size: 544,
-                    download_speed: 16,
-                    eta: 30,
-                }),
-            ),
-            (video_download_done, Message::VideoDownloadDone),
-            (
-                video_download_error,
-                Message::VideoDownloadError("<error-message>".into()),
-            ),
-            (playlist_url, Message::PlaylistUrl("<playlist-url>".into())),
-            (
-                playlist_name,
-                Message::PlaylistName("<playlist-name>".into()),
-            ),
-            (playlist_video_count, Message::PlaylistVideoCount(99)),
-            (playlist_video_index, Message::PlaylistVideoIndex(11)),
-            (playlist_download_done, Message::PlaylistDownloadDone),
-        ];
-
-        for (i, e) in inputs_and_expected_results {
-            assert_eq!(parse(i).unwrap(), e);
-        }
+        let s2 = "[Unrecognized prefix]";
+        assert!(parse_prefix(&s2).is_err());
 
         Ok(())
     }
+
+    test_message_parsing!(
+        video_url: (VIDEO_URL, Message::VideoUrl("<video-url>".into())),
+        video_download_path: (
+            VIDEO_DOWNLOAD_PATH,
+            Message::VideoDownloadPath("<video-download-path>".into()),
+        ),
+        video_download_progress: (
+            VIDEO_DOWNLOAD_PROGRESS,
+            Message::VideoDownloadProgress(DownloadProgress {
+                percent: 10,
+                total_size: 544,
+                download_speed: 16,
+                eta: 30,
+            }),
+        ),
+        video_download_done: (VIDEO_DOWNLOAD_DONE, Message::VideoDownloadDone),
+        video_download_error: (
+            VIDEO_DOWNLOAD_ERROR,
+            Message::VideoDownloadError("<error-message>".into()),
+        ),
+        playlist_url: (PLAYLIST_URL, Message::PlaylistUrl("<playlist-url>".into())),
+        playlist_name: (
+            PLAYLIST_NAME,
+            Message::PlaylistName("<playlist-name>".into()),
+        ),
+        playlist_video_count: (PLAYLIST_VIDEO_COUNT, Message::PlaylistVideoCount(99)),
+        playlist_video_index: (PLAYLIST_VIDEO_INDEX, Message::PlaylistVideoIndex(11)),
+        playlist_download_done: (PLAYLIST_DOWNLOAD_DONE, Message::PlaylistDownloadDone),
+    );
 }

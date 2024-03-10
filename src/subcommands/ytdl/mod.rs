@@ -9,6 +9,7 @@ use crate::util::get_clipboard_contents;
 
 mod aggregator;
 mod message;
+mod test_macros;
 
 struct DownloadMetadata {
     title: String,
