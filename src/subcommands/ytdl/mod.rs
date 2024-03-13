@@ -92,7 +92,11 @@ fn download(download_args: &ArgMatches) -> anyhow::Result<()> {
     let bufreader = BufReader::new(stdout);
     for line in bufreader.lines() {
         match line {
-            Ok(line) => println!("{}", line),
+            Ok(line) => {
+                println!("{}", line);
+                let message = message::parse(&line);
+                println!("{:?}", message);
+            }
             Err(err) => println!("Error: {:?}", err),
         }
     }
