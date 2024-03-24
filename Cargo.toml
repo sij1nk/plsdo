@@ -10,7 +10,7 @@ define_subcommands_macro = { path = "define_subcommands_macro" }
 xshell = "0.2"
 anyhow = { version = "1.0", features = ["backtrace"]}
 serde_json = "1.0"
-serde = { version = "1.0", features = ["derive"]}
+serde = { version = "1.0", features = ["derive"] }
 strum = "0.24"
 strum_macros = "0.24"
 clap = { version = "4", features = ["cargo", "derive"]}

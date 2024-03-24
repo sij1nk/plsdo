@@ -1,15 +1,19 @@
 use clap::{arg, ArgMatches, Command};
+use serde::{Deserialize, Serialize};
 use std::{
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, Write},
+    os::unix::net::UnixStream,
     process::{Command as StdCommand, Stdio},
 };
-use xshell::{cmd, Shell};
+use xshell::Shell;
 
-use crate::util::get_clipboard_contents;
+use crate::{system_atlas::SYSTEM_ATLAS, util::get_clipboard_contents};
+
+use self::ytdl_line::YtdlLine;
 
 mod aggregator;
-mod message;
 mod test_macros;
+mod ytdl_line;
 
 struct DownloadMetadata {
     title: String,
@@ -54,8 +58,8 @@ pub fn command_extension(cmd: Command) -> Command {
                     Command::new("clipboard").about("Download a video or audio file, trying to interpret the clipboard contents as an URL")
                 ]
             ),
-        Command::new("run_progress_server").about("Run the progress server, which aggregates the progress of ongoing downloads"),
-        Command::new("get_download_progress").about("Get the progress of ongoing downloads")
+        Command::new("run_aggregator").about("Run the aggregator server, which aggregates the progress of ongoing downloads"),
+        Command::new("get_download_progress").about("Get the progress of ongoing downloads from the aggregator")
     ];
     cmd.subcommand_required(true)
         .arg_required_else_help(true)
@@ -78,10 +82,22 @@ fn get_download_url(download_args: &ArgMatches) -> anyhow::Result<String> {
     }
 }
 
-fn parse_ytdl_output_line(line: &str) {}
+#[derive(Debug, Serialize, Deserialize)]
+struct Message {
+    pid: u32,
+    line: YtdlLine,
+}
+
+fn send_message(message: &Message) -> anyhow::Result<()> {
+    let stream = UnixStream::connect(SYSTEM_ATLAS.ytdl_aggregator_socket)?;
+    serde_json::to_writer(stream, message)?;
+    Ok(())
+}
 
 fn download(download_args: &ArgMatches) -> anyhow::Result<()> {
     let url = get_download_url(download_args)?;
+
+    // TODO: choose a format specifier and use that
 
     let mut child = StdCommand::new("yt-dlp")
         .args(["-f", "160", "--progress", "--newline", &url])
@@ -90,12 +106,18 @@ fn download(download_args: &ArgMatches) -> anyhow::Result<()> {
         .expect("it to work");
     let stdout = child.stdout.take().expect("Child should have stdout");
     let bufreader = BufReader::new(stdout);
+    let pid = child.id();
     for line in bufreader.lines() {
         match line {
             Ok(line) => {
                 println!("{}", line);
-                let message = message::parse(&line);
-                println!("{:?}", message);
+                if let Ok(line) = ytdl_line::parse(&line) {
+                    let message = Message { pid, line };
+                    if let Err(err) = send_message(&message) {
+                        println!("Could not send message!");
+                        println!("{:?}", err);
+                    }
+                }
             }
             Err(err) => println!("Error: {:?}", err),
         }
@@ -109,7 +131,7 @@ fn download(download_args: &ArgMatches) -> anyhow::Result<()> {
 pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
     match args.subcommand() {
         Some(("download", download_args)) => download(download_args)?,
-        Some(("run_progress_server", _)) => aggregator::run()?,
+        Some(("run_aggregator", _)) => aggregator::run()?,
         Some(("get_download_progress", _)) => {}
         _ => {}
     }

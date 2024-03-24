@@ -2,7 +2,7 @@ use nom::{
     branch::alt,
     bytes::complete::{tag, take, take_until, take_while},
     character::{
-        complete::{char, digit0, digit1, multispace0},
+        complete::{digit0, digit1, multispace0},
         is_digit,
     },
     combinator::{fail, map_res},
@@ -12,8 +12,9 @@ use nom::{
     IResult,
 };
 use phf::phf_map;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DownloadProgress {
     percent: u32,
     total_size: u32,     // KiB, rounded
@@ -21,8 +22,8 @@ pub struct DownloadProgress {
     eta: u32,            // seconds
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Message {
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum YtdlLine {
     VideoUrl(String),                        // [youtube] Extracting URL: <video-url>
     VideoDownloadPath(String),               // [download] Destination: <video-download-path>
     VideoDownloadProgress(DownloadProgress), // [download] <percent>% of <total-size> at <download-speed> ETA <eta>
@@ -35,7 +36,7 @@ pub enum Message {
     PlaylistDownloadDone,    // [download] Finished downloading playlist: <playlist-name>
 }
 
-static PARSER_PREFIXES: phf::Map<&str, for<'a> fn(&'a str) -> IResult<&'a str, Message>> = phf_map! {
+static PARSER_PREFIXES: phf::Map<&str, for<'a> fn(&'a str) -> IResult<&'a str, YtdlLine>> = phf_map! {
     "[download]" => parse_download,
     "[youtube]" => parse_youtube,
     "[youtube:tab]" => parse_youtube_tab,
@@ -51,7 +52,7 @@ const ERROR_PREFIX: &str = "ERROR:";
 // TODO: if parsing fails due to unexpected input format, we'd like to know:
 // - what the input was
 // - what the nom error was (where it got stuck)
-pub fn parse(input: &str) -> anyhow::Result<Message> {
+pub fn parse(input: &str) -> anyhow::Result<YtdlLine> {
     let (rem, prefix) = parse_prefix(input).map_err(|e| e.to_owned())?;
 
     if let Some(rem_parser) = PARSER_PREFIXES
@@ -80,15 +81,15 @@ fn parse_prefix(input: &str) -> IResult<&str, &str> {
 
 // "[youtube] Extracting URL: <video-url>";
 //           ^
-fn parse_youtube(input: &str) -> IResult<&str, Message> {
+fn parse_youtube(input: &str) -> IResult<&str, YtdlLine> {
     let (rem, _) = tag(" Extracting URL: ")(input)?;
-    Ok(("", Message::VideoUrl(rem.into())))
+    Ok(("", YtdlLine::VideoUrl(rem.into())))
 }
 
 // "[youtube:tab] Playlist <playlist-name>: Downloading 99 items of 99";
 // "[youtube:tab] Extracting URL: <playlist-url>";
 //               ^
-fn parse_youtube_tab(input: &str) -> IResult<&str, Message> {
+fn parse_youtube_tab(input: &str) -> IResult<&str, YtdlLine> {
     let extracting_prefix = " Extracting URL: ";
     let playlist_prefix = " Playlist ";
 
@@ -104,9 +105,9 @@ fn parse_youtube_tab(input: &str) -> IResult<&str, Message> {
             let (rem, _) = tag(" items of ")(rem)?;
             let (_, total_count) = u32_parser(rem)?;
 
-            Ok(("", Message::PlaylistVideoCount(total_count)))
+            Ok(("", YtdlLine::PlaylistVideoCount(total_count)))
         }
-        w if w == extracting_prefix => Ok(("", Message::PlaylistUrl(rem.into()))),
+        w if w == extracting_prefix => Ok(("", YtdlLine::PlaylistUrl(rem.into()))),
         _ => fail(rem),
     }
 }
@@ -118,7 +119,7 @@ fn parse_youtube_tab(input: &str) -> IResult<&str, Message> {
 // "[download] Downloading item 11 of 99";
 // "[download] Finished downloading playlist: <playlist-name>";
 //            ^
-fn parse_download(input: &str) -> IResult<&str, Message> {
+fn parse_download(input: &str) -> IResult<&str, YtdlLine> {
     let video_download_path_prefix = " Destination: ";
     let playlist_name_prefix = " Downloading playlist: ";
     let playlist_video_index_prefix = " Downloading item ";
@@ -135,17 +136,17 @@ fn parse_download(input: &str) -> IResult<&str, Message> {
     ))(input)?;
 
     match word {
-        w if w == video_download_path_prefix => Ok(("", Message::VideoDownloadPath(rem.into()))),
-        w if w == playlist_name_prefix => Ok(("", Message::PlaylistName(rem.into()))),
+        w if w == video_download_path_prefix => Ok(("", YtdlLine::VideoDownloadPath(rem.into()))),
+        w if w == playlist_name_prefix => Ok(("", YtdlLine::PlaylistName(rem.into()))),
         w if w == playlist_video_index_prefix => {
             let (_, video_index) = u32_parser(rem)?;
-            Ok(("", Message::PlaylistVideoIndex(video_index)))
+            Ok(("", YtdlLine::PlaylistVideoIndex(video_index)))
         }
-        w if w == playlist_download_done_prefix => Ok(("", Message::PlaylistDownloadDone)),
+        w if w == playlist_download_done_prefix => Ok(("", YtdlLine::PlaylistDownloadDone)),
         _ => {
             let progress_percent = double(word)?.1.round() as u32;
             if progress_percent == 100 {
-                return Ok(("", Message::VideoDownloadDone));
+                return Ok(("", YtdlLine::VideoDownloadDone));
             }
             // "% of 543.71KiB at 16.00KiB/s ETA 00:30";
             let (rem, _) = tag("% of")(rem)?;
@@ -167,7 +168,7 @@ fn parse_download(input: &str) -> IResult<&str, Message> {
                 download_speed,
                 eta,
             };
-            Ok(("", Message::VideoDownloadProgress(download_progress)))
+            Ok(("", YtdlLine::VideoDownloadProgress(download_progress)))
         }
     }
 }
@@ -220,10 +221,10 @@ fn parse_eta(input: &str) -> IResult<&str, u32> {
 
 // "ERROR: [youtube] <video-id>: <error-message>" -> <error-message>
 //        ^
-fn parse_error(input: &str) -> IResult<&str, Message> {
+fn parse_error(input: &str) -> IResult<&str, YtdlLine> {
     let (rem, _) = take_until(":")(input)?;
     let (rem, _) = take(2usize)(rem)?;
-    Ok(("", Message::VideoDownloadError(rem.into())))
+    Ok(("", YtdlLine::VideoDownloadError(rem.into())))
 }
 
 fn is_char_digit(c: char) -> bool {
@@ -232,7 +233,7 @@ fn is_char_digit(c: char) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use crate::test_message_parsing;
+    use crate::test_line_parsing;
 
     use super::*;
 
@@ -261,34 +262,34 @@ mod tests {
         Ok(())
     }
 
-    test_message_parsing!(
-        video_url: (VIDEO_URL, Message::VideoUrl("<video-url>".into())),
+    test_line_parsing!(
+        video_url: (VIDEO_URL, YtdlLine::VideoUrl("<video-url>".into())),
         video_download_path: (
             VIDEO_DOWNLOAD_PATH,
-            Message::VideoDownloadPath("<video-download-path>".into()),
+            YtdlLine::VideoDownloadPath("<video-download-path>".into()),
         ),
         video_download_progress: (
             VIDEO_DOWNLOAD_PROGRESS,
-            Message::VideoDownloadProgress(DownloadProgress {
+            YtdlLine::VideoDownloadProgress(DownloadProgress {
                 percent: 0,
                 total_size: 10076,
                 download_speed: 4,
                 eta: 2516,
             }),
         ),
-        video_download_done: (VIDEO_DOWNLOAD_DONE, Message::VideoDownloadDone),
+        video_download_done: (VIDEO_DOWNLOAD_DONE, YtdlLine::VideoDownloadDone),
         video_download_error: (
             VIDEO_DOWNLOAD_ERROR,
-            Message::VideoDownloadError("<error-message>".into()),
+            YtdlLine::VideoDownloadError("<error-message>".into()),
         ),
-        playlist_url: (PLAYLIST_URL, Message::PlaylistUrl("<playlist-url>".into())),
+        playlist_url: (PLAYLIST_URL, YtdlLine::PlaylistUrl("<playlist-url>".into())),
         playlist_name: (
             PLAYLIST_NAME,
-            Message::PlaylistName("<playlist-name>".into()),
+            YtdlLine::PlaylistName("<playlist-name>".into()),
         ),
-        playlist_video_count: (PLAYLIST_VIDEO_COUNT, Message::PlaylistVideoCount(99)),
-        playlist_video_index: (PLAYLIST_VIDEO_INDEX, Message::PlaylistVideoIndex(11)),
-        playlist_download_done: (PLAYLIST_DOWNLOAD_DONE, Message::PlaylistDownloadDone),
+        playlist_video_count: (PLAYLIST_VIDEO_COUNT, YtdlLine::PlaylistVideoCount(99)),
+        playlist_video_index: (PLAYLIST_VIDEO_INDEX, YtdlLine::PlaylistVideoIndex(11)),
+        playlist_download_done: (PLAYLIST_DOWNLOAD_DONE, YtdlLine::PlaylistDownloadDone),
     );
 
     #[test]

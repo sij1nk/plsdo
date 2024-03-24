@@ -1,5 +1,5 @@
 #[macro_export]
-macro_rules! test_message_parsing {
+macro_rules! test_line_parsing {
     ($($name:ident: $value:expr,)*) => {
         mod parser {
             use super::*;
