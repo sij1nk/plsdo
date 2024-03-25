@@ -16,19 +16,26 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DownloadProgress {
-    percent: u32,
-    total_size: u32,     // KiB, rounded
-    download_speed: u32, // KiB/s, rounded
-    eta: u32,            // seconds
+    pub percent: u32,
+    pub total_size: u32,     // KiB, rounded
+    pub download_speed: u32, // KiB/s, rounded
+    pub eta: u32,            // seconds
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Progress {
+    Downloading(DownloadProgress),
+    Extracting,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum YtdlLine {
-    VideoUrl(String),                        // [youtube] Extracting URL: <video-url>
-    VideoDownloadPath(String),               // [download] Destination: <video-download-path>
-    VideoDownloadProgress(DownloadProgress), // [download] <percent>% of <total-size> at <download-speed> ETA <eta>
+    VideoUrl(String),                // [youtube] Extracting URL: <video-url>
+    VideoDownloadPath(String),       // [download] Destination: <video-download-path>
+    VideoDownloadProgress(Progress), // [download] <percent>% of <total-size> at <download-speed> ETA <eta>
     VideoDownloadDone, // [download] 100% of <total-size> in <total-time> at <download-speed>
     VideoDownloadError(String), // ERROR: [youtube] <video-id>: <error-message>
+    VideoExtractAudio(String), // [ExtractAudio] Destination: <video-extract-path>
     PlaylistUrl(String), // [youtube:tab] Extracting URL: <playlist-url>
     PlaylistName(String), // [download] Downloading playlist: <playlist-name>
     PlaylistVideoCount(u32), // [youtube:tab] Playlist <playlist-name>: Downloading <n> items of <playlist-video-count>
@@ -40,7 +47,8 @@ static PARSER_PREFIXES: phf::Map<&str, for<'a> fn(&'a str) -> IResult<&'a str, Y
     "[download]" => parse_download,
     "[youtube]" => parse_youtube,
     "[youtube:tab]" => parse_youtube_tab,
-    "ERROR:" => parse_error
+    "ERROR:" => parse_error,
+    "[ExtractAudio]" => parse_extract_audio,
 };
 
 // TODO: maybe remove these, or use them in the keys of PARSER_PREFIXES, if keeping them is necessary
@@ -48,6 +56,7 @@ const DOWNLOAD_PREFIX: &str = "[download]";
 const YOUTUBE_PREFIX: &str = "[youtube]";
 const YOUTUBE_TAB_PREFIX: &str = "[youtube:tab]";
 const ERROR_PREFIX: &str = "ERROR:";
+const EXTRACT_AUDIO_PREFIX: &str = "[ExtractAudio]";
 
 // TODO: if parsing fails due to unexpected input format, we'd like to know:
 // - what the input was
@@ -76,6 +85,7 @@ fn parse_prefix(input: &str) -> IResult<&str, &str> {
         tag(YOUTUBE_TAB_PREFIX),
         tag(DOWNLOAD_PREFIX),
         tag(ERROR_PREFIX),
+        tag(EXTRACT_AUDIO_PREFIX),
     ))(input)
 }
 
@@ -162,12 +172,12 @@ fn parse_download(input: &str) -> IResult<&str, YtdlLine> {
 
             let total_size = get_size_in_kib(total_size_double, total_size_m);
             let download_speed = get_size_in_kib(download_speed_double, download_speed_m);
-            let download_progress = DownloadProgress {
+            let download_progress = Progress::Downloading(DownloadProgress {
                 percent: progress_percent,
                 total_size,
                 download_speed,
                 eta,
-            };
+            });
             Ok(("", YtdlLine::VideoDownloadProgress(download_progress)))
         }
     }
@@ -227,6 +237,13 @@ fn parse_error(input: &str) -> IResult<&str, YtdlLine> {
     Ok(("", YtdlLine::VideoDownloadError(rem.into())))
 }
 
+// "[ExtractAudio] Destination: <video-extract-path>";
+//                ^
+fn parse_extract_audio(input: &str) -> IResult<&str, YtdlLine> {
+    let (rem, _) = tag(" Destination: ")(input)?;
+    Ok(("", YtdlLine::VideoExtractAudio(rem.into())))
+}
+
 fn is_char_digit(c: char) -> bool {
     c.is_ascii() && (is_digit(c as u8) || c == '.')
 }
@@ -243,6 +260,7 @@ mod tests {
         "[download]   0.2% of    9.84MiB at    4.40KiB/s ETA 41:56";
     const VIDEO_DOWNLOAD_DONE: &str = "[download] 100% of   14.25MiB in 00:00:01 at 9.29MiB/s";
     const VIDEO_DOWNLOAD_ERROR: &str = "ERROR: [youtube] <video-id>: <error-message>";
+    const VIDEO_EXTRACT_AUDIO: &str = "[ExtractAudio] Destination: <video-extract-path>";
     const PLAYLIST_URL: &str = "[youtube:tab] Extracting URL: <playlist-url>";
     const PLAYLIST_NAME: &str = "[download] Downloading playlist: <playlist-name>";
     const PLAYLIST_VIDEO_COUNT: &str =
@@ -270,17 +288,21 @@ mod tests {
         ),
         video_download_progress: (
             VIDEO_DOWNLOAD_PROGRESS,
-            YtdlLine::VideoDownloadProgress(DownloadProgress {
+            YtdlLine::VideoDownloadProgress(Progress::Downloading(DownloadProgress {
                 percent: 0,
                 total_size: 10076,
                 download_speed: 4,
                 eta: 2516,
-            }),
+            })),
         ),
         video_download_done: (VIDEO_DOWNLOAD_DONE, YtdlLine::VideoDownloadDone),
         video_download_error: (
             VIDEO_DOWNLOAD_ERROR,
             YtdlLine::VideoDownloadError("<error-message>".into()),
+        ),
+        video_extract_audio: (
+            VIDEO_EXTRACT_AUDIO,
+            YtdlLine::VideoExtractAudio("<video-extract-path>".into())
         ),
         playlist_url: (PLAYLIST_URL, YtdlLine::PlaylistUrl("<playlist-url>".into())),
         playlist_name: (
