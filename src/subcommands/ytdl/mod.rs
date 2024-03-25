@@ -4,10 +4,16 @@ use std::{
     io::{BufRead, BufReader, Write},
     os::unix::net::UnixStream,
     process::{Command as StdCommand, Stdio},
+    str::FromStr,
 };
+use strum::IntoEnumIterator;
+use strum_macros::{Display, EnumIter, EnumString};
 use xshell::Shell;
 
-use crate::{system_atlas::SYSTEM_ATLAS, util::get_clipboard_contents};
+use crate::{
+    system_atlas::SYSTEM_ATLAS,
+    util::{dmenu, get_clipboard_contents},
+};
 
 use self::ytdl_line::YtdlLine;
 
@@ -15,13 +21,8 @@ mod aggregator;
 mod test_macros;
 mod ytdl_line;
 
-struct DownloadMetadata {
-    title: String,
-    url: String,
-    filename: String,
-}
-
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Display, Clone, Copy, EnumString, EnumIter)]
+// #[strum(serialize_all = "PascalCase")]
 enum DownloadFormat {
     UpTo1440p,
     UpTo1080p,
@@ -31,7 +32,7 @@ enum DownloadFormat {
     AudioOnly,
 }
 
-fn get_download_format_specifier(format: DownloadFormat) -> &'static [&'static str] {
+fn get_download_format_specifier(format: &DownloadFormat) -> &'static [&'static str] {
     match format {
         DownloadFormat::UpTo1440p => {
             &["-f", "bestvideo[height<=1440]+bestaudio/best[height<=1440]"]
@@ -85,7 +86,13 @@ fn get_download_url(download_args: &ArgMatches) -> anyhow::Result<String> {
 #[derive(Debug, Serialize, Deserialize)]
 struct Message {
     pid: u32,
-    line: YtdlLine,
+    payload: MessagePayload,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+enum MessagePayload {
+    YtdlLine(YtdlLine),
+    ProcessExited(i32),
 }
 
 fn send_message(message: &Message) -> anyhow::Result<()> {
@@ -94,13 +101,17 @@ fn send_message(message: &Message) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn download(download_args: &ArgMatches) -> anyhow::Result<()> {
+fn download(sh: &Shell, download_args: &ArgMatches) -> anyhow::Result<()> {
     let url = get_download_url(download_args)?;
 
     // TODO: choose a format specifier and use that
+    let formats: Vec<_> = DownloadFormat::iter().map(|opt| opt.to_string()).collect();
+    let choice = dmenu(sh, "Choose download format", &formats, true)?;
+    let format = DownloadFormat::from_str(&choice)?;
+    let format_specifier = get_download_format_specifier(&format);
 
     let mut child = StdCommand::new("yt-dlp")
-        .args(["-f", "160", "--progress", "--newline", &url])
+        .args([format_specifier, &["--progress", "--newline", &url]].concat())
         .stdout(Stdio::piped())
         .spawn()
         .expect("it to work");
@@ -112,7 +123,10 @@ fn download(download_args: &ArgMatches) -> anyhow::Result<()> {
             Ok(line) => {
                 println!("{}", line);
                 if let Ok(line) = ytdl_line::parse(&line) {
-                    let message = Message { pid, line };
+                    let message = Message {
+                        pid,
+                        payload: MessagePayload::YtdlLine(line),
+                    };
                     if let Err(err) = send_message(&message) {
                         println!("Could not send message!");
                         println!("{:?}", err);
@@ -124,13 +138,18 @@ fn download(download_args: &ArgMatches) -> anyhow::Result<()> {
     }
 
     let ecode = child.wait().expect("wait on child failed");
-    println!("Ecode: {}", ecode);
+    let ecode = ecode.code().unwrap_or(1);
+    let message = Message {
+        pid,
+        payload: MessagePayload::ProcessExited(ecode),
+    };
+    let _ = send_message(&message);
     Ok(())
 }
 
 pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
     match args.subcommand() {
-        Some(("download", download_args)) => download(download_args)?,
+        Some(("download", download_args)) => download(sh, download_args)?,
         Some(("run_aggregator", _)) => aggregator::run()?,
         Some(("get_download_progress", _)) => {}
         _ => {}

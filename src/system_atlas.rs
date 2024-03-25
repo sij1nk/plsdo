@@ -9,6 +9,7 @@ pub struct SystemAtlas<'a> {
     pub eww_workspaces: &'a str,
     pub eww_keyboard_layout: &'a str,
     pub hyprland: &'a str,
+    pub ytdl_aggregator_socket: &'a str,
 }
 
 pub const SYSTEM_ATLAS: SystemAtlas = SystemAtlas {
@@ -20,4 +21,5 @@ pub const SYSTEM_ATLAS: SystemAtlas = SystemAtlas {
     eww_workspaces: "/tmp/eww-workspaces",
     eww_keyboard_layout: "/tmp/eww-keyboard-layout",
     hyprland: "/home/rg/.config/hypr/hyprland.conf",
+    ytdl_aggregator_socket: "/tmp/plsdo-ytdl-aggregator.sock",
 };
