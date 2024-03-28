@@ -197,3 +197,18 @@ pub fn run() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn process_message_for_single_video_works() {
+        let state: State = Arc::new(Mutex::new(BTreeMap::new()));
+        let messages: Vec<Message> = vec![];
+
+        for message in messages {
+            let _ = process_message(&state, message);
+        }
+    }
+}

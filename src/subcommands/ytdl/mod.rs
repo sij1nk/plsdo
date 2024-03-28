@@ -95,16 +95,51 @@ enum MessagePayload {
     ProcessExited(i32),
 }
 
-fn send_message(message: &Message) -> anyhow::Result<()> {
-    let stream = UnixStream::connect(SYSTEM_ATLAS.ytdl_aggregator_socket)?;
-    serde_json::to_writer(stream, message)?;
-    Ok(())
+trait MessageSender {
+    fn send_message(&mut self, message: &Message) -> anyhow::Result<()>;
+}
+
+struct AggregatorMessageSender;
+
+impl MessageSender for AggregatorMessageSender {
+    fn send_message(&mut self, message: &Message) -> anyhow::Result<()> {
+        let stream = UnixStream::connect(SYSTEM_ATLAS.ytdl_aggregator_socket)?;
+        serde_json::to_writer(stream, message)?;
+        Ok(())
+    }
+}
+
+// TODO:
+struct DummyMessageSender;
+
+// TODO: maybe map from lines -> messages and test that instead?
+fn process_lines(
+    pid: u32,
+    lines: impl Iterator<Item = std::io::Result<String>>,
+    sender: &mut impl MessageSender,
+) {
+    for line in lines {
+        match line {
+            Ok(line) => {
+                if let Ok(line) = ytdl_line::parse(&line) {
+                    let message = Message {
+                        pid,
+                        payload: MessagePayload::YtdlLine(line),
+                    };
+                    if let Err(err) = sender.send_message(&message) {
+                        eprintln!("Could not send message!");
+                        eprintln!("{:?}", err);
+                    }
+                }
+            }
+            Err(err) => eprintln!("Error: {:?}", err),
+        }
+    }
 }
 
 fn download(sh: &Shell, download_args: &ArgMatches) -> anyhow::Result<()> {
     let url = get_download_url(download_args)?;
 
-    // TODO: choose a format specifier and use that
     let formats: Vec<_> = DownloadFormat::iter().map(|opt| opt.to_string()).collect();
     let choice = dmenu(sh, "Choose download format", &formats, true)?;
     let format = DownloadFormat::from_str(&choice)?;
@@ -118,24 +153,8 @@ fn download(sh: &Shell, download_args: &ArgMatches) -> anyhow::Result<()> {
     let stdout = child.stdout.take().expect("Child should have stdout");
     let bufreader = BufReader::new(stdout);
     let pid = child.id();
-    for line in bufreader.lines() {
-        match line {
-            Ok(line) => {
-                println!("{}", line);
-                if let Ok(line) = ytdl_line::parse(&line) {
-                    let message = Message {
-                        pid,
-                        payload: MessagePayload::YtdlLine(line),
-                    };
-                    if let Err(err) = send_message(&message) {
-                        println!("Could not send message!");
-                        println!("{:?}", err);
-                    }
-                }
-            }
-            Err(err) => println!("Error: {:?}", err),
-        }
-    }
+    let mut sender = AggregatorMessageSender;
+    process_lines(pid, bufreader.lines(), &mut sender);
 
     let ecode = child.wait().expect("wait on child failed");
     let ecode = ecode.code().unwrap_or(1);
@@ -143,7 +162,7 @@ fn download(sh: &Shell, download_args: &ArgMatches) -> anyhow::Result<()> {
         pid,
         payload: MessagePayload::ProcessExited(ecode),
     };
-    let _ = send_message(&message);
+    let _ = sender.send_message(&message);
     Ok(())
 }
 
