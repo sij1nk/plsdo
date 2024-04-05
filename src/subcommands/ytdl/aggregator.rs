@@ -170,7 +170,7 @@ fn process_message(state: &State, message: Message) -> anyhow::Result<()> {
             let _dlinfo = state.remove(&message.pid);
             if ecode != 0 {
                 return Err(anyhow::anyhow!(
-                    "DownloadScript process exited with exit code {}",
+                    "Download Process exited with exit code {}",
                     ecode
                 ));
             }
@@ -200,15 +200,149 @@ pub fn run() -> anyhow::Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use crate::subcommands::ytdl::ytdl_line::{DownloadProgress, YtdlLine};
+    use crate::subcommands::ytdl::MessagePayload;
+
     use super::*;
 
+    fn create_message(pid: u32, mut message: Message) -> Message {
+        message.pid = pid;
+        message
+    }
+
+    fn create_messages(pid: u32, messages: &mut [Message]) -> Vec<Message> {
+        for message in messages.iter_mut() {
+            message.pid = pid;
+        }
+        messages.to_vec()
+    }
+
+    fn msg(line: YtdlLine) -> Message {
+        Message {
+            pid: 0,
+            payload: MessagePayload::YtdlLine(line),
+        }
+    }
+
+    fn url(url: &str) -> Message {
+        msg(YtdlLine::VideoUrl(url.into()))
+    }
+
+    fn path(path: &str) -> Message {
+        msg(YtdlLine::VideoDownloadPath(path.into()))
+    }
+
+    fn progress(percent: u32, total_size: u32, download_speed: u32, eta: u32) -> Message {
+        msg(YtdlLine::VideoDownloadProgress(Progress::Downloading(
+            DownloadProgress {
+                percent,
+                total_size,
+                download_speed,
+                eta,
+            },
+        )))
+    }
+
+    fn done() -> Message {
+        msg(YtdlLine::VideoDownloadDone)
+    }
+
+    fn exited() -> Message {
+        Message {
+            pid: 0,
+            payload: MessagePayload::ProcessExited(0),
+        }
+    }
+
     #[test]
-    fn process_message_for_single_video_works() {
+    fn processing_single_download() {
         let state: State = Arc::new(Mutex::new(BTreeMap::new()));
-        let messages: Vec<Message> = vec![];
+        let messages = create_messages(
+            42,
+            &mut [
+                url("url"),
+                path("path"),
+                progress(1, 100, 20, 100),
+                progress(20, 100, 40, 70),
+                progress(60, 100, 40, 30),
+                progress(100, 100, 40, 30),
+                done(),
+            ],
+        );
+
+        let last_message = create_messages(42, &mut [exited()]).pop().unwrap();
 
         for message in messages {
             let _ = process_message(&state, message);
         }
+
+        assert_eq!(state.lock().unwrap().len(), 1);
+
+        let _ = process_message(&state, last_message);
+
+        assert_eq!(state.lock().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn processing_two_interleaved_downloads() {
+        let state: State = Arc::new(Mutex::new(BTreeMap::new()));
+        let messages1 = vec![
+            create_message(42, url("url")),
+            create_message(43, url("url2")),
+            create_message(42, path("path")),
+            create_message(42, progress(1, 100, 20, 100)),
+            create_message(43, path("path2")),
+        ];
+
+        let messages2 = vec![
+            create_message(42, progress(20, 100, 40, 70)),
+            create_message(42, progress(60, 100, 40, 30)),
+            create_message(43, progress(0, 200, 10, 100)),
+            create_message(43, progress(10, 200, 10, 90)),
+            create_message(43, progress(20, 200, 10, 80)),
+            create_message(42, progress(100, 100, 40, 30)),
+            create_message(42, done()),
+            create_message(43, progress(30, 200, 10, 70)),
+            create_message(43, progress(40, 200, 10, 60)),
+            create_message(43, progress(50, 200, 10, 50)),
+            create_message(43, progress(60, 200, 10, 40)),
+            create_message(42, exited()),
+        ];
+
+        let messages3 = vec![
+            create_message(43, progress(70, 200, 10, 30)),
+            create_message(43, progress(80, 200, 10, 20)),
+            create_message(43, progress(90, 200, 10, 10)),
+            create_message(43, progress(100, 200, 10, 0)),
+            create_message(43, done()),
+            create_message(43, exited()),
+        ];
+
+        for message in messages1 {
+            let _ = process_message(&state, message);
+        }
+
+        assert_eq!(state.lock().unwrap().len(), 2);
+
+        for message in messages2 {
+            let _ = process_message(&state, message);
+        }
+
+        assert_eq!(state.lock().unwrap().len(), 1);
+
+        for message in messages3 {
+            let _ = process_message(&state, message);
+        }
+
+        assert_eq!(state.lock().unwrap().len(), 0);
+    }
+
+    #[test]
+    #[should_panic]
+    fn processing_out_of_order_path_message_fails() {
+        let state: State = Arc::new(Mutex::new(BTreeMap::new()));
+        let messages = create_messages(42, &mut [path("path")]);
+
+        process_message(&state, messages[0].clone()).unwrap();
     }
 }
