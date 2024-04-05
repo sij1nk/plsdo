@@ -43,7 +43,9 @@ pub enum YtdlLine {
     PlaylistDownloadDone,    // [download] Finished downloading playlist: <playlist-name>
 }
 
-static PARSER_PREFIXES: phf::Map<&str, for<'a> fn(&'a str) -> IResult<&'a str, YtdlLine>> = phf_map! {
+type ParserFn = for<'a> fn(&'a str) -> IResult<&'a str, YtdlLine>;
+
+static PARSER_PREFIXES: phf::Map<&str, ParserFn> = phf_map! {
     "[download]" => parse_download,
     "[youtube]" => parse_youtube,
     "[youtube:tab]" => parse_youtube_tab,

@@ -5,9 +5,9 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use crate::{subcommands::ytdl::Message, system_atlas::SYSTEM_ATLAS};
+use crate::system_atlas::SYSTEM_ATLAS;
 
-use super::ytdl_line::Progress;
+use super::{ytdl_line::Progress, Message};
 
 #[derive(Debug, Clone)]
 struct UrlOnly {
@@ -88,91 +88,96 @@ enum DownloadInfo {
 fn process_message(state: &State, message: Message) -> anyhow::Result<()> {
     let mut state = state.lock().expect("lock to work");
 
-    match message.payload {
-        super::MessagePayload::YtdlLine(line) => match line {
-            super::ytdl_line::YtdlLine::VideoUrl(url) => {
-                // TODO: maybe get angry here if pid is already tracked?
-                state.insert(message.pid, DownloadInfo::UrlOnly(UrlOnly { url }));
-            }
-            super::ytdl_line::YtdlLine::VideoDownloadPath(path_string) => {
-                let dlinfo = state.remove(&message.pid).ok_or(anyhow::anyhow!(
-                    "Received VideoDownloadPath for a download which was not tracked"
-                ))?;
-                let DownloadInfo::UrlOnly(url) = dlinfo else {
-                    return Err(anyhow::anyhow!(
-                        "Received VideoDownloadPath while DownloadInfo wasn't UrlOnly"
-                    ));
-                };
-                let metadata = url.create_metadata(path_string)?;
-                state.insert(message.pid, DownloadInfo::MetadataOnly(metadata));
-            }
-            super::ytdl_line::YtdlLine::VideoDownloadProgress(progress) => {
-                let dlinfo = state.remove(&message.pid).ok_or(anyhow::anyhow!(
-                    "Received VideoDownloadProgress for a download which was not tracked"
-                ))?;
-                let full_dlinfo = match dlinfo {
-                    DownloadInfo::UrlOnly(_) => {
+    match message {
+        Message::QueryMessage => todo!(),
+        Message::DownloadProcessMessage(message) => {
+            match message.payload {
+                super::MessagePayload::YtdlLine(line) => match line {
+                    super::ytdl_line::YtdlLine::VideoUrl(url) => {
+                        // TODO: maybe get angry here if pid is already tracked?
+                        state.insert(message.pid, DownloadInfo::UrlOnly(UrlOnly { url }));
+                    }
+                    super::ytdl_line::YtdlLine::VideoDownloadPath(path_string) => {
+                        let dlinfo = state.remove(&message.pid).ok_or(anyhow::anyhow!(
+                            "Received VideoDownloadPath for a download which was not tracked"
+                        ))?;
+                        let DownloadInfo::UrlOnly(url) = dlinfo else {
+                            return Err(anyhow::anyhow!(
+                                "Received VideoDownloadPath while DownloadInfo wasn't UrlOnly"
+                            ));
+                        };
+                        let metadata = url.create_metadata(path_string)?;
+                        state.insert(message.pid, DownloadInfo::MetadataOnly(metadata));
+                    }
+                    super::ytdl_line::YtdlLine::VideoDownloadProgress(progress) => {
+                        let dlinfo = state.remove(&message.pid).ok_or(anyhow::anyhow!(
+                            "Received VideoDownloadProgress for a download which was not tracked"
+                        ))?;
+                        let full_dlinfo = match dlinfo {
+                            DownloadInfo::UrlOnly(_) => {
+                                return Err(anyhow::anyhow!(
+                                    "Received VideoDownloadProgress before VideoDownloadPath"
+                                ))
+                            }
+                            DownloadInfo::MetadataOnly(metadata) => {
+                                metadata.create_full_download_info(progress)
+                            }
+                            DownloadInfo::Full(mut full_dlinfo) => {
+                                full_dlinfo.update_progress(progress);
+                                full_dlinfo
+                            }
+                        };
+                        state.insert(message.pid, DownloadInfo::Full(full_dlinfo));
+                    }
+                    super::ytdl_line::YtdlLine::VideoDownloadDone => {
+                        // dlinfo should not be removed yet, in case audio is extracted later
+                        let dlinfo = state.remove(&message.pid).ok_or(anyhow::anyhow!(
+                            "Received VideoDownloadDone for a download which was not tracked"
+                        ))?;
+                        let DownloadInfo::Full(mut full_dlinfo) = dlinfo else {
+                            return Err(anyhow::anyhow!(
+                                "Received VideoDownloadDone before VideoDownloadProgress"
+                            ));
+                        };
+                        full_dlinfo.set_as_completed();
+                        state.insert(message.pid, DownloadInfo::Full(full_dlinfo));
+                    }
+                    super::ytdl_line::YtdlLine::VideoDownloadError(_) => {
+                        let _dlinfo = state.remove(&message.pid);
+                    }
+                    super::ytdl_line::YtdlLine::VideoExtractAudio(_) => {
+                        let dlinfo = state.remove(&message.pid).ok_or(anyhow::anyhow!(
+                            "Received VideoExtractAudio for a download which was not tracked"
+                        ))?;
+                        let DownloadInfo::Full(mut full_dlinfo) = dlinfo else {
+                            return Err(anyhow::anyhow!(
+                                "Received VideoExtractAudio before VideoDownloadProgress"
+                            ));
+                        };
+                        if !full_dlinfo.is_completed() {
+                            return Err(anyhow::anyhow!(
+                                "Received VideoExtractAudio for a download which is not completed"
+                            ));
+                        }
+                        full_dlinfo.set_as_extracting();
+                        state.insert(message.pid, DownloadInfo::Full(full_dlinfo));
+                    }
+                    // TODO: playlists later
+                    super::ytdl_line::YtdlLine::PlaylistUrl(_) => todo!(),
+                    super::ytdl_line::YtdlLine::PlaylistName(_) => todo!(),
+                    super::ytdl_line::YtdlLine::PlaylistVideoCount(_) => todo!(),
+                    super::ytdl_line::YtdlLine::PlaylistVideoIndex(_) => todo!(),
+                    super::ytdl_line::YtdlLine::PlaylistDownloadDone => todo!(),
+                },
+                super::MessagePayload::ProcessExited(ecode) => {
+                    let _dlinfo = state.remove(&message.pid);
+                    if ecode != 0 {
                         return Err(anyhow::anyhow!(
-                            "Received VideoDownloadProgress before VideoDownloadPath"
-                        ))
+                            "Download Process exited with exit code {}",
+                            ecode
+                        ));
                     }
-                    DownloadInfo::MetadataOnly(metadata) => {
-                        metadata.create_full_download_info(progress)
-                    }
-                    DownloadInfo::Full(mut full_dlinfo) => {
-                        full_dlinfo.update_progress(progress);
-                        full_dlinfo
-                    }
-                };
-                state.insert(message.pid, DownloadInfo::Full(full_dlinfo));
-            }
-            super::ytdl_line::YtdlLine::VideoDownloadDone => {
-                // dlinfo should not be removed yet, in case audio is extracted later
-                let dlinfo = state.remove(&message.pid).ok_or(anyhow::anyhow!(
-                    "Received VideoDownloadDone for a download which was not tracked"
-                ))?;
-                let DownloadInfo::Full(mut full_dlinfo) = dlinfo else {
-                    return Err(anyhow::anyhow!(
-                        "Received VideoDownloadDone before VideoDownloadProgress"
-                    ));
-                };
-                full_dlinfo.set_as_completed();
-                state.insert(message.pid, DownloadInfo::Full(full_dlinfo));
-            }
-            super::ytdl_line::YtdlLine::VideoDownloadError(_) => {
-                let _dlinfo = state.remove(&message.pid);
-            }
-            super::ytdl_line::YtdlLine::VideoExtractAudio(_) => {
-                let dlinfo = state.remove(&message.pid).ok_or(anyhow::anyhow!(
-                    "Received VideoExtractAudio for a download which was not tracked"
-                ))?;
-                let DownloadInfo::Full(mut full_dlinfo) = dlinfo else {
-                    return Err(anyhow::anyhow!(
-                        "Received VideoExtractAudio before VideoDownloadProgress"
-                    ));
-                };
-                if !full_dlinfo.is_completed() {
-                    return Err(anyhow::anyhow!(
-                        "Received VideoExtractAudio for a download which is not completed"
-                    ));
                 }
-                full_dlinfo.set_as_extracting();
-                state.insert(message.pid, DownloadInfo::Full(full_dlinfo));
-            }
-            // TODO: playlists later
-            super::ytdl_line::YtdlLine::PlaylistUrl(_) => todo!(),
-            super::ytdl_line::YtdlLine::PlaylistName(_) => todo!(),
-            super::ytdl_line::YtdlLine::PlaylistVideoCount(_) => todo!(),
-            super::ytdl_line::YtdlLine::PlaylistVideoIndex(_) => todo!(),
-            super::ytdl_line::YtdlLine::PlaylistDownloadDone => todo!(),
-        },
-        super::MessagePayload::ProcessExited(ecode) => {
-            let _dlinfo = state.remove(&message.pid);
-            if ecode != 0 {
-                return Err(anyhow::anyhow!(
-                    "Download Process exited with exit code {}",
-                    ecode
-                ));
             }
         }
     }
@@ -201,38 +206,47 @@ pub fn run() -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use crate::subcommands::ytdl::ytdl_line::{DownloadProgress, YtdlLine};
-    use crate::subcommands::ytdl::MessagePayload;
+    use crate::subcommands::ytdl::{DownloadProcessMessage, MessagePayload};
 
     use super::*;
 
-    fn create_message(pid: u32, mut message: Message) -> Message {
+    fn create_message(pid: u32, mut message: DownloadProcessMessage) -> Message {
         message.pid = pid;
-        message
+        Message::DownloadProcessMessage(message)
     }
 
-    fn create_messages(pid: u32, messages: &mut [Message]) -> Vec<Message> {
+    fn create_messages(pid: u32, messages: &mut [DownloadProcessMessage]) -> Vec<Message> {
         for message in messages.iter_mut() {
             message.pid = pid;
         }
-        messages.to_vec()
+        messages
+            .iter()
+            .cloned()
+            .map(Message::DownloadProcessMessage)
+            .collect()
     }
 
-    fn msg(line: YtdlLine) -> Message {
-        Message {
+    fn msg(line: YtdlLine) -> DownloadProcessMessage {
+        DownloadProcessMessage {
             pid: 0,
             payload: MessagePayload::YtdlLine(line),
         }
     }
 
-    fn url(url: &str) -> Message {
+    fn url(url: &str) -> DownloadProcessMessage {
         msg(YtdlLine::VideoUrl(url.into()))
     }
 
-    fn path(path: &str) -> Message {
+    fn path(path: &str) -> DownloadProcessMessage {
         msg(YtdlLine::VideoDownloadPath(path.into()))
     }
 
-    fn progress(percent: u32, total_size: u32, download_speed: u32, eta: u32) -> Message {
+    fn progress(
+        percent: u32,
+        total_size: u32,
+        download_speed: u32,
+        eta: u32,
+    ) -> DownloadProcessMessage {
         msg(YtdlLine::VideoDownloadProgress(Progress::Downloading(
             DownloadProgress {
                 percent,
@@ -243,12 +257,12 @@ mod tests {
         )))
     }
 
-    fn done() -> Message {
+    fn done() -> DownloadProcessMessage {
         msg(YtdlLine::VideoDownloadDone)
     }
 
-    fn exited() -> Message {
-        Message {
+    fn exited() -> DownloadProcessMessage {
+        DownloadProcessMessage {
             pid: 0,
             payload: MessagePayload::ProcessExited(0),
         }
