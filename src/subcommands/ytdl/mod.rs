@@ -83,40 +83,27 @@ fn get_download_url(download_args: &ArgMatches) -> anyhow::Result<String> {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct Message {
     pid: u32,
     payload: MessagePayload,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 enum MessagePayload {
     YtdlLine(YtdlLine),
     ProcessExited(i32),
 }
 
-trait MessageSender {
-    fn send_message(&mut self, message: &Message) -> anyhow::Result<()>;
+fn send_message(stream: &UnixStream, message: &Message) -> anyhow::Result<()> {
+    serde_json::to_writer(stream, message)?;
+    Ok(())
 }
 
-struct AggregatorMessageSender;
-
-impl MessageSender for AggregatorMessageSender {
-    fn send_message(&mut self, message: &Message) -> anyhow::Result<()> {
-        let stream = UnixStream::connect(SYSTEM_ATLAS.ytdl_aggregator_socket)?;
-        serde_json::to_writer(stream, message)?;
-        Ok(())
-    }
-}
-
-// TODO:
-struct DummyMessageSender;
-
-// TODO: maybe map from lines -> messages and test that instead?
 fn process_lines(
     pid: u32,
+    stream: &UnixStream,
     lines: impl Iterator<Item = std::io::Result<String>>,
-    sender: &mut impl MessageSender,
 ) {
     for line in lines {
         match line {
@@ -126,7 +113,7 @@ fn process_lines(
                         pid,
                         payload: MessagePayload::YtdlLine(line),
                     };
-                    if let Err(err) = sender.send_message(&message) {
+                    if let Err(err) = send_message(stream, &message) {
                         eprintln!("Could not send message!");
                         eprintln!("{:?}", err);
                     }
@@ -153,8 +140,8 @@ fn download(sh: &Shell, download_args: &ArgMatches) -> anyhow::Result<()> {
     let stdout = child.stdout.take().expect("Child should have stdout");
     let bufreader = BufReader::new(stdout);
     let pid = child.id();
-    let mut sender = AggregatorMessageSender;
-    process_lines(pid, bufreader.lines(), &mut sender);
+    let stream = UnixStream::connect(SYSTEM_ATLAS.ytdl_aggregator_socket)?;
+    process_lines(pid, &stream, bufreader.lines());
 
     let ecode = child.wait().expect("wait on child failed");
     let ecode = ecode.code().unwrap_or(1);
@@ -162,7 +149,7 @@ fn download(sh: &Shell, download_args: &ArgMatches) -> anyhow::Result<()> {
         pid,
         payload: MessagePayload::ProcessExited(ecode),
     };
-    let _ = sender.send_message(&message);
+    let _ = send_message(&stream, &message);
     Ok(())
 }
 
