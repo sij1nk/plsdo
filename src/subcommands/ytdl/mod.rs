@@ -1,7 +1,7 @@
 use clap::{arg, ArgMatches, Command};
 use serde::{Deserialize, Serialize};
 use std::{
-    io::{BufRead, BufReader, Write},
+    io::{BufRead, BufReader},
     os::unix::net::UnixStream,
     process::{Command as StdCommand, Stdio},
     str::FromStr,
@@ -84,7 +84,13 @@ fn get_download_url(download_args: &ArgMatches) -> anyhow::Result<String> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct Message {
+enum Message {
+    QueryMessage,
+    DownloadProcessMessage(DownloadProcessMessage),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct DownloadProcessMessage {
     pid: u32,
     payload: MessagePayload,
 }
@@ -109,10 +115,10 @@ fn process_lines(
         match line {
             Ok(line) => {
                 if let Ok(line) = ytdl_line::parse(&line) {
-                    let message = Message {
+                    let message = Message::DownloadProcessMessage(DownloadProcessMessage {
                         pid,
                         payload: MessagePayload::YtdlLine(line),
-                    };
+                    });
                     if let Err(err) = send_message(stream, &message) {
                         eprintln!("Could not send message!");
                         eprintln!("{:?}", err);
@@ -145,10 +151,10 @@ fn download(sh: &Shell, download_args: &ArgMatches) -> anyhow::Result<()> {
 
     let ecode = child.wait().expect("wait on child failed");
     let ecode = ecode.code().unwrap_or(1);
-    let message = Message {
+    let message = Message::DownloadProcessMessage(DownloadProcessMessage {
         pid,
         payload: MessagePayload::ProcessExited(ecode),
-    };
+    });
     let _ = send_message(&stream, &message);
     Ok(())
 }
