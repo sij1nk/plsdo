@@ -1,7 +1,7 @@
 use clap::{arg, value_parser, ArgMatches, Command, ValueEnum};
 use serde::{Deserialize, Serialize};
 use std::{
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, Read, Write},
     os::unix::net::UnixStream,
     process::{Command as StdCommand, Stdio},
 };
@@ -102,9 +102,19 @@ enum MessagePayload {
     ProcessExited(i32),
 }
 
-fn send_message(stream: &UnixStream, message: &Message) -> anyhow::Result<()> {
-    serde_json::to_writer(stream, message)?;
+fn send_message(mut stream: &UnixStream, message: &Message) -> anyhow::Result<()> {
+    let mut string = serde_json::to_string(message)?;
+    string.push('\0');
+    stream.write_all(string.as_bytes())?;
+    // serde_json::to_writer(stream, message)?;
     Ok(())
+}
+
+fn send_query_message(mut stream: &UnixStream, message: &Message) -> anyhow::Result<String> {
+    send_message(stream, message)?;
+    let mut response = String::new();
+    stream.read_to_string(&mut response)?;
+    Ok(response)
 }
 
 fn process_lines(
@@ -148,7 +158,13 @@ fn download(sh: &Shell, download_args: &ArgMatches) -> anyhow::Result<()> {
     let format_specifier = get_download_format_specifier(&format);
 
     let mut child = StdCommand::new("yt-dlp")
-        .args([format_specifier, &["--progress", "--newline", &url]].concat())
+        .args(
+            [
+                format_specifier,
+                &["--progress", "--newline", "-r", "16384", &url],
+            ]
+            .concat(),
+        )
         .stdout(Stdio::piped())
         .spawn()
         .expect("it to work");
@@ -172,7 +188,12 @@ pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
     match args.subcommand() {
         Some(("download", download_args)) => download(sh, download_args)?,
         Some(("run_aggregator", _)) => aggregator::run()?,
-        Some(("get_download_progress", _)) => {}
+        Some(("get_download_progress", _)) => {
+            let message = Message::QueryMessage;
+            let stream = UnixStream::connect(SYSTEM_ATLAS.ytdl_aggregator_socket)?;
+            let response = send_query_message(&stream, &message)?;
+            println!("{response}");
+        }
         _ => {}
     }
 
