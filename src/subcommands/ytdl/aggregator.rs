@@ -1,5 +1,6 @@
 use std::{
     collections::BTreeMap,
+    io::Read,
     os::unix::net::UnixListener,
     path::Path,
     sync::{Arc, Mutex},
@@ -192,9 +193,13 @@ pub fn run() -> anyhow::Result<()> {
 
     for stream in listener.incoming() {
         match stream {
-            Ok(stream) => {
-                let message: Message = serde_json::from_reader(stream)?;
-                let _ = process_message(&state, message);
+            Ok(mut stream) => {
+                let mut str = String::new();
+                let _ = stream.read_to_string(&mut str)?;
+                println!("{str}");
+
+                // let message: Message = serde_json::from_reader(stream)?;
+                // let _ = process_message(&state, message);
             }
             Err(err) => break,
         }
