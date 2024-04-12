@@ -1,13 +1,12 @@
-use clap::{arg, ArgMatches, Command};
+use clap::{arg, value_parser, ArgMatches, Command, ValueEnum};
 use serde::{Deserialize, Serialize};
 use std::{
     io::{BufRead, BufReader},
     os::unix::net::UnixStream,
     process::{Command as StdCommand, Stdio},
-    str::FromStr,
 };
 use strum::IntoEnumIterator;
-use strum_macros::{Display, EnumIter, EnumString};
+use strum_macros::{Display, EnumIter};
 use xshell::Shell;
 
 use crate::{
@@ -21,8 +20,10 @@ mod aggregator;
 mod test_macros;
 mod ytdl_line;
 
-#[derive(Debug, Display, Clone, Copy, EnumString, EnumIter)]
-// #[strum(serialize_all = "PascalCase")]
+// TODO: allow better values for --format argument (e.g. "1440p", "worst-video") but keep dmenu
+// working
+#[derive(Debug, Display, Clone, Copy, EnumIter, ValueEnum)]
+#[clap(rename_all = "verbatim")]
 enum DownloadFormat {
     UpTo1440p,
     UpTo1080p,
@@ -58,7 +59,7 @@ pub fn command_extension(cmd: Command) -> Command {
                         .arg(arg!([URL] "The URL to download from")),
                     Command::new("clipboard").about("Download a video or audio file, trying to interpret the clipboard contents as an URL")
                 ]
-            ),
+            ).arg(arg!(-f --format <FORMAT>).value_parser(value_parser!(DownloadFormat))),
         Command::new("run_aggregator").about("Run the aggregator server, which aggregates the progress of ongoing downloads"),
         Command::new("get_download_progress").about("Get the progress of ongoing downloads from the aggregator")
     ];
@@ -132,10 +133,18 @@ fn process_lines(
 
 fn download(sh: &Shell, download_args: &ArgMatches) -> anyhow::Result<()> {
     let url = get_download_url(download_args)?;
+    let format = download_args
+        .get_one::<DownloadFormat>("format")
+        .copied()
+        .ok_or(anyhow::anyhow!("Download format was not specified"))
+        .or_else(|_| {
+            let formats: Vec<_> = DownloadFormat::iter().map(|opt| opt.to_string()).collect();
+            dmenu(sh, "Choose download format", &formats, true).and_then(|value| {
+                DownloadFormat::from_str(&value, true).map_err(|e| anyhow::anyhow!(e))
+            })
+        })?;
 
-    let formats: Vec<_> = DownloadFormat::iter().map(|opt| opt.to_string()).collect();
-    let choice = dmenu(sh, "Choose download format", &formats, true)?;
-    let format = DownloadFormat::from_str(&choice)?;
+    println!("{:?}", format);
     let format_specifier = get_download_format_specifier(&format);
 
     let mut child = StdCommand::new("yt-dlp")
