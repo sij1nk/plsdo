@@ -46,7 +46,7 @@ pub fn define_subcommands(tokens: TokenStream) -> TokenStream {
     let descriptions = definitions.iter().map(|d| d.description.clone());
 
     let expanded = quote! {
-        const SUBCOMMANDS: &[(Definition, Script)] = &[
+        pub const SUBCOMMANDS: &[(Definition, Script)] = &[
             #(
                 (
                     (stringify!(#names), #descriptions, subcommands::#names::command_extension),
