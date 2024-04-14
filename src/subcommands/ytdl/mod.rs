@@ -22,14 +22,26 @@ mod ytdl_line;
 
 // TODO: allow better values for --format argument (e.g. "1440p", "worst-video") but keep dmenu
 // working
-#[derive(Debug, Display, Clone, Copy, EnumIter, ValueEnum)]
+#[derive(Debug, strum_macros::Display, Clone, Copy, EnumIter, ValueEnum)]
 #[clap(rename_all = "verbatim")]
 enum DownloadFormat {
+    #[clap(name = "1440p")]
+    #[strum(serialize = "1440p")]
     UpTo1440p,
+    #[clap(name = "1080p")]
+    #[strum(serialize = "1080p")]
     UpTo1080p,
+    #[clap(name = "720p")]
+    #[strum(serialize = "720p")]
     UpTo720p,
+    #[clap(name = "480p")]
+    #[strum(serialize = "480p")]
     UpTo480p,
+    #[clap(name = "worst")]
+    #[strum(serialize = "worst")]
     WorstVideo,
+    #[clap(name = "audio-only")]
+    #[strum(serialize = "audio-only")]
     AudioOnly,
 }
 
