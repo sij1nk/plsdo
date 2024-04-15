@@ -41,6 +41,9 @@ pub enum YtdlLine {
     PlaylistVideoCount(u32), // [youtube:tab] Playlist <playlist-name>: Downloading <n> items of <playlist-video-count>
     PlaylistVideoIndex(u32), // [download] Downloading item <playlist-video-index> of <playlist-video-count>
     PlaylistDownloadDone,    // [download] Finished downloading playlist: <playlist-name>
+    // NOTE: Exit is used by `emulate`, to signal that the emulated process has exited. It does not
+    // represent an actual line output by ytdl
+    Exit(i32), // EXIT: <exit-code>
 }
 
 type ParserFn = for<'a> fn(&'a str) -> IResult<&'a str, YtdlLine>;
@@ -51,6 +54,7 @@ static PARSER_PREFIXES: phf::Map<&str, ParserFn> = phf_map! {
     "[youtube:tab]" => parse_youtube_tab,
     "ERROR:" => parse_error,
     "[ExtractAudio]" => parse_extract_audio,
+    "EXIT:" => parse_exit
 };
 
 // TODO: maybe remove these, or use them in the keys of PARSER_PREFIXES, if keeping them is necessary
@@ -59,6 +63,7 @@ const YOUTUBE_PREFIX: &str = "[youtube]";
 const YOUTUBE_TAB_PREFIX: &str = "[youtube:tab]";
 const ERROR_PREFIX: &str = "ERROR:";
 const EXTRACT_AUDIO_PREFIX: &str = "[ExtractAudio]";
+const EXIT_PREFIX: &str = "EXIT:";
 
 // TODO: if parsing fails due to unexpected input format, we'd like to know:
 // - what the input was
@@ -88,6 +93,7 @@ fn parse_prefix(input: &str) -> IResult<&str, &str> {
         tag(DOWNLOAD_PREFIX),
         tag(ERROR_PREFIX),
         tag(EXTRACT_AUDIO_PREFIX),
+        tag(EXIT_PREFIX),
     ))(input)
 }
 
@@ -246,6 +252,16 @@ fn parse_extract_audio(input: &str) -> IResult<&str, YtdlLine> {
     Ok(("", YtdlLine::VideoExtractAudio(rem.into())))
 }
 
+// "EXIT: <exit-code>"
+//       ^
+fn parse_exit(input: &str) -> IResult<&str, YtdlLine> {
+    let mut i32_parser = map_res(digit1, |s: &str| s.parse::<i32>());
+    let (rem, _) = tag(" ")(input)?;
+    let (_, ecode) = i32_parser(rem)?;
+
+    Ok(("", YtdlLine::Exit(ecode)))
+}
+
 fn is_char_digit(c: char) -> bool {
     c.is_ascii() && (is_digit(c as u8) || c == '.')
 }
@@ -270,6 +286,7 @@ mod tests {
     const PLAYLIST_VIDEO_INDEX: &str = "[download] Downloading item 11 of 99";
     const PLAYLIST_DOWNLOAD_DONE: &str =
         "[download] Finished downloading playlist: <playlist-name>";
+    const EXIT: &str = "EXIT: 42";
 
     #[test]
     fn parse_prefix_works() -> anyhow::Result<()> {
@@ -314,6 +331,7 @@ mod tests {
         playlist_video_count: (PLAYLIST_VIDEO_COUNT, YtdlLine::PlaylistVideoCount(99)),
         playlist_video_index: (PLAYLIST_VIDEO_INDEX, YtdlLine::PlaylistVideoIndex(11)),
         playlist_download_done: (PLAYLIST_DOWNLOAD_DONE, YtdlLine::PlaylistDownloadDone),
+        exit: (EXIT, YtdlLine::Exit(42)),
     );
 
     #[test]
