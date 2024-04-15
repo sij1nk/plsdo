@@ -1,5 +1,6 @@
 use std::{
     collections::BTreeMap,
+    fs,
     io::Read,
     os::unix::net::UnixListener,
     path::Path,
@@ -8,7 +9,7 @@ use std::{
 
 use crate::system_atlas::SYSTEM_ATLAS;
 
-use super::{ytdl_line::Progress, Message};
+use super::{ytdl_line::Progress, Message, ProcessId};
 
 #[derive(Debug, Clone)]
 struct UrlOnly {
@@ -77,7 +78,6 @@ impl FullDownloadInfo {
 // TODO: prepare progress server to be a systemd service? logging and stuff?
 // TODO: pretty printing progress to console?
 
-type ProcessId = u32;
 type State = Arc<Mutex<BTreeMap<ProcessId, DownloadInfo>>>;
 
 enum DownloadInfo {
@@ -88,6 +88,17 @@ enum DownloadInfo {
 
 fn process_message(state: &State, message: Message) -> anyhow::Result<()> {
     let mut state = state.lock().expect("lock to work");
+
+    let mut handle_exit = |pid: ProcessId, ecode: i32| {
+        let _dlinfo = state.remove(&pid);
+        if ecode != 0 {
+            return Err(anyhow::anyhow!(
+                "Download Process exited with exit code {}",
+                ecode
+            ));
+        }
+        Ok(())
+    };
 
     match message {
         Message::QueryMessage => todo!(),
@@ -163,6 +174,7 @@ fn process_message(state: &State, message: Message) -> anyhow::Result<()> {
                         full_dlinfo.set_as_extracting();
                         state.insert(message.pid, DownloadInfo::Full(full_dlinfo));
                     }
+                    super::ytdl_line::YtdlLine::Exit(ecode) => handle_exit(message.pid, ecode)?,
                     // TODO: playlists later
                     super::ytdl_line::YtdlLine::PlaylistUrl(_) => todo!(),
                     super::ytdl_line::YtdlLine::PlaylistName(_) => todo!(),
@@ -170,15 +182,7 @@ fn process_message(state: &State, message: Message) -> anyhow::Result<()> {
                     super::ytdl_line::YtdlLine::PlaylistVideoIndex(_) => todo!(),
                     super::ytdl_line::YtdlLine::PlaylistDownloadDone => todo!(),
                 },
-                super::MessagePayload::ProcessExited(ecode) => {
-                    let _dlinfo = state.remove(&message.pid);
-                    if ecode != 0 {
-                        return Err(anyhow::anyhow!(
-                            "Download Process exited with exit code {}",
-                            ecode
-                        ));
-                    }
-                }
+                super::MessagePayload::ProcessExited(ecode) => handle_exit(message.pid, ecode)?,
             }
         }
     }
