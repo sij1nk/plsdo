@@ -106,7 +106,7 @@ fn get_current_volume(sh: &Shell) -> anyhow::Result<Volume> {
     })
 }
 
-pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
+pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<Option<String>> {
     let volume = match args.subcommand() {
         Some(("set", set_args)) => {
             let delta = determine_delta(set_args)?;
@@ -124,5 +124,5 @@ pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
         write_volume_to_backing_file(volume)?;
     }
 
-    Ok(())
+    Ok(None)
 }

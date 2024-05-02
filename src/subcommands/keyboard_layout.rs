@@ -85,7 +85,7 @@ fn set_layout_by_id_hyprland(keyboards: &[Keyboard], id: u8) -> anyhow::Result<(
     Ok(())
 }
 
-pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
+pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<Option<String>> {
     let wm = determine_wm();
 
     match wm {
@@ -136,7 +136,7 @@ fn write_layout_to_backing_file_hyprland(id: u8, name: &str) -> anyhow::Result<(
     Ok(())
 }
 
-fn run_hyprland(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
+fn run_hyprland(sh: &Shell, args: &ArgMatches) -> anyhow::Result<Option<String>> {
     let keyboards = Devices::get()?.keyboards;
     let layout_names = get_layout_names_hyprland()?;
 
@@ -187,10 +187,10 @@ fn run_hyprland(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
         write_layout_to_backing_file_hyprland(id, &name)?;
     }
 
-    Ok(())
+    Ok(None)
 }
 
-fn run_x11(_sh: &Shell, _args: &ArgMatches) -> anyhow::Result<()> {
+fn run_x11(_sh: &Shell, _args: &ArgMatches) -> anyhow::Result<Option<String>> {
     unimplemented!()
 }
 

@@ -248,7 +248,7 @@ fn download(sh: &Shell, download_args: &ArgMatches) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
+pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<Option<String>> {
     match args.subcommand() {
         Some(("download", download_args)) => download(sh, download_args)?,
         Some(("emulate", emulate_args)) => emulate_download(emulate_args)?,
@@ -257,12 +257,13 @@ pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
             let message = Message::QueryMessage;
             let stream = UnixStream::connect(SYSTEM_ATLAS.ytdl_aggregator_socket)?;
             let response = send_query_message(&stream, &message)?;
-            println!("{response}");
+            // println!("{response}");
+            return Ok(Some(response));
         }
         _ => {}
     }
 
-    Ok(())
+    Ok(None)
 }
 
 #[cfg(test)]

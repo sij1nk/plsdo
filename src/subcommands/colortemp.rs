@@ -53,7 +53,7 @@ fn write_colortemp_to_backing_file(colortemp: u16) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn run(_: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
+pub fn run(_: &Shell, args: &ArgMatches) -> anyhow::Result<Option<String>> {
     let delta = determine_delta(args)?;
 
     let connection = Connection::new_session()?;
@@ -69,5 +69,5 @@ pub fn run(_: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
 
     write_colortemp_to_backing_file(colortemp as u16)?;
 
-    Ok(())
+    Ok(None)
 }

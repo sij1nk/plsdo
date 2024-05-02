@@ -33,12 +33,12 @@ pub fn command_extension(cmd: Command) -> Command {
     cmd
 }
 
-pub fn run(sh: &Shell, _: &ArgMatches) -> anyhow::Result<()> {
+pub fn run(sh: &Shell, _: &ArgMatches) -> anyhow::Result<Option<String>> {
     let opts: Vec<_> = PowerMenuOption::iter().map(|opt| opt.to_string()).collect();
 
     let result = dmenu(sh, "Choose operation", &opts, true)?;
 
     PowerMenuOption::from_str(&result)?.execute(sh)?;
 
-    Ok(())
+    Ok(None)
 }

@@ -54,7 +54,7 @@ fn write_brightness_to_backing_file(brightness: f64) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn run(_: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
+pub fn run(_: &Shell, args: &ArgMatches) -> anyhow::Result<Option<String>> {
     let signed_delta = determine_delta(args)?;
 
     let connection = Connection::new_session()?;
@@ -71,5 +71,5 @@ pub fn run(_: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
 
     write_brightness_to_backing_file(brightness)?;
 
-    Ok(())
+    Ok(None)
 }

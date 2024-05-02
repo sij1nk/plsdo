@@ -190,17 +190,22 @@ fn process_message(state: &State, message: Message) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn start_listener() -> anyhow::Result<UnixListener> {
+    let _ = fs::remove_file(SYSTEM_ATLAS.ytdl_aggregator_socket);
+    let listener = UnixListener::bind(SYSTEM_ATLAS.ytdl_aggregator_socket)?;
+    Ok(listener)
+}
+
 /// Launch a daemon process, which maintains a map of ongoing ytdl downloads
 pub fn run() -> anyhow::Result<()> {
     let state: State = Arc::new(Mutex::new(BTreeMap::new()));
-    let listener = UnixListener::bind(SYSTEM_ATLAS.ytdl_aggregator_socket)?;
+    let listener = start_listener()?;
 
     for stream in listener.incoming() {
         match stream {
             Ok(mut stream) => {
                 let mut str = String::new();
                 let _ = stream.read_to_string(&mut str)?;
-                println!("{str}");
 
                 // let message: Message = serde_json::from_reader(stream)?;
                 // let _ = process_message(&state, message);

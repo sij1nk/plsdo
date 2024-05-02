@@ -310,7 +310,7 @@ pub fn get_active_workspace_ids() -> anyhow::Result<(WorkspaceId, WorkspaceId)> 
     Ok((*primary, *secondary))
 }
 
-pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
+pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<Option<String>> {
     match args.subcommand() {
         Some(("focus", focus_args)) => focus_workspace(sh, focus_args, false),
         Some(("move", move_args)) => focus_workspace(sh, move_args, true),
@@ -319,5 +319,5 @@ pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
         _ => Ok(()),
     }?;
 
-    Ok(())
+    Ok(None)
 }

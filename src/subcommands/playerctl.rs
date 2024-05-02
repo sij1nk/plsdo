@@ -125,7 +125,7 @@ pub fn command_extension(cmd: Command) -> Command {
     PlayerCommand::augment_subcommands(cmd)
 }
 
-pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
+pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<Option<String>> {
     // TODO: unwrap
     let subcmd = PlayerCommand::from_arg_matches(args)
         .map_err(|err| err.exit())
@@ -159,5 +159,5 @@ pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
         let player = get_selected_player_from_file()?;
         invoke_player_command(sh, &player, subcmd)?;
     }
-    Ok(())
+    Ok(None)
 }
