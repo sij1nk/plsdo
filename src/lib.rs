@@ -11,7 +11,7 @@ pub type Definition = (
     &'static str,           // description
     fn(Command) -> Command, // command extension
 );
-pub type Script = fn(&Shell, &ArgMatches) -> anyhow::Result<()>;
+pub type Script = fn(&Shell, &ArgMatches) -> anyhow::Result<Option<String>>;
 
 // Each plsdo subcommand can be invoked as a subcommand on the plsdo command. Subcommands are
 // expected to live under the `subcommands` folder, and must provide implementations for the `run`
@@ -31,7 +31,7 @@ define_subcommands!([
     (ytdl, "Download videos using yt-dlp")
 ]);
 
-pub fn run_subcommand(shell: &Shell, matches: &ArgMatches) -> anyhow::Result<()> {
+pub fn run_subcommand(shell: &Shell, matches: &ArgMatches) -> anyhow::Result<Option<String>> {
     let (subcmd_name, subcmd_args) = matches.subcommand().expect(
         "A subcommand is always received;
 otherwise clap exits before getting this far",

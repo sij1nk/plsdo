@@ -22,7 +22,7 @@ pub fn command_extension(cmd: Command) -> Command {
     )
 }
 
-pub fn run(_sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
+pub fn run(_sh: &Shell, args: &ArgMatches) -> anyhow::Result<Option<String>> {
     let dir = args.get_one::<Direction>("direction");
 
     // unwrap: argument is required
@@ -54,5 +54,5 @@ pub fn run(_sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
         Ok(())
     })?;
 
-    Ok(())
+    Ok(None)
 }

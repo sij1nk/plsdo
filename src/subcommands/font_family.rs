@@ -11,7 +11,7 @@ pub fn command_extension(cmd: Command) -> Command {
     cmd
 }
 
-pub fn run(sh: &Shell, _: &ArgMatches) -> anyhow::Result<()> {
+pub fn run(sh: &Shell, _: &ArgMatches) -> anyhow::Result<Option<String>> {
     util::modify_file(
         SYSTEM_ATLAS.fontconfig,
         "<family>monospace</family>\n",
@@ -65,5 +65,5 @@ pub fn run(sh: &Shell, _: &ArgMatches) -> anyhow::Result<()> {
         },
     )?;
 
-    Ok(())
+    Ok(None)
 }

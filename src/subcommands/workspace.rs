@@ -379,7 +379,7 @@ fn open_pinned(args: &ArgMatches) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
+pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<Option<String>> {
     match args.subcommand() {
         Some(("focus", focus_args)) => focus_workspace(sh, focus_args, false),
         Some(("move", move_args)) => focus_workspace(sh, move_args, true),
@@ -387,5 +387,5 @@ pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
         _ => Ok(()),
     }?;
 
-    Ok(())
+    Ok(None)
 }
