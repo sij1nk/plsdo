@@ -1,17 +1,18 @@
 use std::{
     collections::BTreeMap,
     fs,
-    io::Read,
-    os::unix::net::UnixListener,
+    os::unix::net::UnixDatagram,
     path::Path,
     sync::{Arc, Mutex},
 };
 
+use serde::{Deserialize, Serialize};
+
 use crate::system_atlas::SYSTEM_ATLAS;
 
-use super::{ytdl_line::Progress, Message, ProcessId};
+use super::{ytdl_line::Progress, DownloadProcessMessage, Message, ProcessId};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct UrlOnly {
     url: String,
 }
@@ -31,7 +32,7 @@ impl UrlOnly {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct DownloadMetadata {
     url: String,
     path: String,
@@ -47,7 +48,7 @@ impl DownloadMetadata {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct FullDownloadInfo {
     metadata: DownloadMetadata,
     progress: Progress,
@@ -80,13 +81,32 @@ impl FullDownloadInfo {
 
 type State = Arc<Mutex<BTreeMap<ProcessId, DownloadInfo>>>;
 
+#[derive(Debug, Serialize, Deserialize)]
 enum DownloadInfo {
     UrlOnly(UrlOnly),
     MetadataOnly(DownloadMetadata),
     Full(FullDownloadInfo),
 }
 
-fn process_message(state: &State, message: Message) -> anyhow::Result<()> {
+fn handle_query_message(state: &State, socket: &UnixDatagram) -> anyhow::Result<()> {
+    let state = state.lock().expect("lock to work");
+    let state_string = serde_json::to_string_pretty(&*state)?;
+    println!("{state_string}");
+    socket.send(state_string.as_bytes())?;
+    Ok(())
+}
+
+fn handle_message(state: &State, message: Message, socket: &UnixDatagram) -> anyhow::Result<()> {
+    match message {
+        Message::QueryMessage => handle_query_message(state, socket),
+        Message::DownloadProcessMessage(message) => handle_download_process_message(state, message),
+    }
+}
+
+fn handle_download_process_message(
+    state: &State,
+    message: DownloadProcessMessage,
+) -> anyhow::Result<()> {
     let mut state = state.lock().expect("lock to work");
 
     let mut handle_exit = |pid: ProcessId, ecode: i32| {
@@ -100,118 +120,120 @@ fn process_message(state: &State, message: Message) -> anyhow::Result<()> {
         Ok(())
     };
 
-    match message {
-        Message::QueryMessage => todo!(),
-        Message::DownloadProcessMessage(message) => {
-            match message.payload {
-                super::MessagePayload::YtdlLine(line) => match line {
-                    super::ytdl_line::YtdlLine::VideoUrl(url) => {
-                        // TODO: maybe get angry here if pid is already tracked?
-                        state.insert(message.pid, DownloadInfo::UrlOnly(UrlOnly { url }));
-                    }
-                    super::ytdl_line::YtdlLine::VideoDownloadPath(path_string) => {
-                        let dlinfo = state.remove(&message.pid).ok_or(anyhow::anyhow!(
-                            "Received VideoDownloadPath for a download which was not tracked"
-                        ))?;
-                        let DownloadInfo::UrlOnly(url) = dlinfo else {
-                            return Err(anyhow::anyhow!(
-                                "Received VideoDownloadPath while DownloadInfo wasn't UrlOnly"
-                            ));
-                        };
-                        let metadata = url.create_metadata(path_string)?;
-                        state.insert(message.pid, DownloadInfo::MetadataOnly(metadata));
-                    }
-                    super::ytdl_line::YtdlLine::VideoDownloadProgress(progress) => {
-                        let dlinfo = state.remove(&message.pid).ok_or(anyhow::anyhow!(
-                            "Received VideoDownloadProgress for a download which was not tracked"
-                        ))?;
-                        let full_dlinfo = match dlinfo {
-                            DownloadInfo::UrlOnly(_) => {
-                                return Err(anyhow::anyhow!(
-                                    "Received VideoDownloadProgress before VideoDownloadPath"
-                                ))
-                            }
-                            DownloadInfo::MetadataOnly(metadata) => {
-                                metadata.create_full_download_info(progress)
-                            }
-                            DownloadInfo::Full(mut full_dlinfo) => {
-                                full_dlinfo.update_progress(progress);
-                                full_dlinfo
-                            }
-                        };
-                        state.insert(message.pid, DownloadInfo::Full(full_dlinfo));
-                    }
-                    super::ytdl_line::YtdlLine::VideoDownloadDone => {
-                        // dlinfo should not be removed yet, in case audio is extracted later
-                        let dlinfo = state.remove(&message.pid).ok_or(anyhow::anyhow!(
-                            "Received VideoDownloadDone for a download which was not tracked"
-                        ))?;
-                        let DownloadInfo::Full(mut full_dlinfo) = dlinfo else {
-                            return Err(anyhow::anyhow!(
-                                "Received VideoDownloadDone before VideoDownloadProgress"
-                            ));
-                        };
-                        full_dlinfo.set_as_completed();
-                        state.insert(message.pid, DownloadInfo::Full(full_dlinfo));
-                    }
-                    super::ytdl_line::YtdlLine::VideoDownloadError(_) => {
-                        let _dlinfo = state.remove(&message.pid);
-                    }
-                    super::ytdl_line::YtdlLine::VideoExtractAudio(_) => {
-                        let dlinfo = state.remove(&message.pid).ok_or(anyhow::anyhow!(
-                            "Received VideoExtractAudio for a download which was not tracked"
-                        ))?;
-                        let DownloadInfo::Full(mut full_dlinfo) = dlinfo else {
-                            return Err(anyhow::anyhow!(
-                                "Received VideoExtractAudio before VideoDownloadProgress"
-                            ));
-                        };
-                        if !full_dlinfo.is_completed() {
-                            return Err(anyhow::anyhow!(
-                                "Received VideoExtractAudio for a download which is not completed"
-                            ));
-                        }
-                        full_dlinfo.set_as_extracting();
-                        state.insert(message.pid, DownloadInfo::Full(full_dlinfo));
-                    }
-                    super::ytdl_line::YtdlLine::Exit(ecode) => handle_exit(message.pid, ecode)?,
-                    // TODO: playlists later
-                    super::ytdl_line::YtdlLine::PlaylistUrl(_) => todo!(),
-                    super::ytdl_line::YtdlLine::PlaylistName(_) => todo!(),
-                    super::ytdl_line::YtdlLine::PlaylistVideoCount(_) => todo!(),
-                    super::ytdl_line::YtdlLine::PlaylistVideoIndex(_) => todo!(),
-                    super::ytdl_line::YtdlLine::PlaylistDownloadDone => todo!(),
-                },
-                super::MessagePayload::ProcessExited(ecode) => handle_exit(message.pid, ecode)?,
+    match message.payload {
+        super::MessagePayload::YtdlLine(line) => match line {
+            super::ytdl_line::YtdlLine::VideoUrl(url) => {
+                // TODO: maybe get angry here if pid is already tracked?
+                state.insert(message.pid, DownloadInfo::UrlOnly(UrlOnly { url }));
             }
-        }
+            super::ytdl_line::YtdlLine::VideoDownloadPath(path_string) => {
+                let dlinfo = state.remove(&message.pid).ok_or(anyhow::anyhow!(
+                    "Received VideoDownloadPath for a download which was not tracked"
+                ))?;
+                let DownloadInfo::UrlOnly(url) = dlinfo else {
+                    return Err(anyhow::anyhow!(
+                        "Received VideoDownloadPath while DownloadInfo wasn't UrlOnly"
+                    ));
+                };
+                let metadata = url.create_metadata(path_string)?;
+                state.insert(message.pid, DownloadInfo::MetadataOnly(metadata));
+            }
+            super::ytdl_line::YtdlLine::VideoDownloadProgress(progress) => {
+                let dlinfo = state.remove(&message.pid).ok_or(anyhow::anyhow!(
+                    "Received VideoDownloadProgress for a download which was not tracked"
+                ))?;
+                let full_dlinfo = match dlinfo {
+                    DownloadInfo::UrlOnly(_) => {
+                        return Err(anyhow::anyhow!(
+                            "Received VideoDownloadProgress before VideoDownloadPath"
+                        ))
+                    }
+                    DownloadInfo::MetadataOnly(metadata) => {
+                        metadata.create_full_download_info(progress)
+                    }
+                    DownloadInfo::Full(mut full_dlinfo) => {
+                        full_dlinfo.update_progress(progress);
+                        full_dlinfo
+                    }
+                };
+                state.insert(message.pid, DownloadInfo::Full(full_dlinfo));
+            }
+            super::ytdl_line::YtdlLine::VideoDownloadDone => {
+                // dlinfo should not be removed yet, in case audio is extracted later
+                let dlinfo = state.remove(&message.pid).ok_or(anyhow::anyhow!(
+                    "Received VideoDownloadDone for a download which was not tracked"
+                ))?;
+                let DownloadInfo::Full(mut full_dlinfo) = dlinfo else {
+                    return Err(anyhow::anyhow!(
+                        "Received VideoDownloadDone before VideoDownloadProgress"
+                    ));
+                };
+                full_dlinfo.set_as_completed();
+                state.insert(message.pid, DownloadInfo::Full(full_dlinfo));
+            }
+            super::ytdl_line::YtdlLine::VideoDownloadError(_) => {
+                let _dlinfo = state.remove(&message.pid);
+            }
+            super::ytdl_line::YtdlLine::VideoExtractAudio(_) => {
+                let dlinfo = state.remove(&message.pid).ok_or(anyhow::anyhow!(
+                    "Received VideoExtractAudio for a download which was not tracked"
+                ))?;
+                let DownloadInfo::Full(mut full_dlinfo) = dlinfo else {
+                    return Err(anyhow::anyhow!(
+                        "Received VideoExtractAudio before VideoDownloadProgress"
+                    ));
+                };
+                if !full_dlinfo.is_completed() {
+                    return Err(anyhow::anyhow!(
+                        "Received VideoExtractAudio for a download which is not completed"
+                    ));
+                }
+                full_dlinfo.set_as_extracting();
+                state.insert(message.pid, DownloadInfo::Full(full_dlinfo));
+            }
+            super::ytdl_line::YtdlLine::Exit(ecode) => handle_exit(message.pid, ecode)?,
+            // TODO: playlists later
+            super::ytdl_line::YtdlLine::PlaylistUrl(_) => todo!(),
+            super::ytdl_line::YtdlLine::PlaylistName(_) => todo!(),
+            super::ytdl_line::YtdlLine::PlaylistVideoCount(_) => todo!(),
+            super::ytdl_line::YtdlLine::PlaylistVideoIndex(_) => todo!(),
+            super::ytdl_line::YtdlLine::PlaylistDownloadDone => todo!(),
+        },
+        super::MessagePayload::ProcessExited(ecode) => handle_exit(message.pid, ecode)?,
     }
 
     Ok(())
 }
 
-fn start_listener() -> anyhow::Result<UnixListener> {
+fn start_socket() -> anyhow::Result<UnixDatagram> {
     let _ = fs::remove_file(SYSTEM_ATLAS.ytdl_aggregator_socket);
-    let listener = UnixListener::bind(SYSTEM_ATLAS.ytdl_aggregator_socket)?;
+    let listener = UnixDatagram::bind(SYSTEM_ATLAS.ytdl_aggregator_socket)?;
     Ok(listener)
 }
 
 /// Launch a daemon process, which maintains a map of ongoing ytdl downloads
 pub fn run() -> anyhow::Result<()> {
     let state: State = Arc::new(Mutex::new(BTreeMap::new()));
-    let listener = start_listener()?;
+    let socket = start_socket()?;
 
-    for stream in listener.incoming() {
-        match stream {
-            Ok(mut stream) => {
-                let mut str = String::new();
-                let _ = stream.read_to_string(&mut str)?;
+    // TODO: what would be the optimal size?
+    let mut buf = vec![0; 1024];
 
-                // let message: Message = serde_json::from_reader(stream)?;
-                // let _ = process_message(&state, message);
+    while let Ok(n) = socket.recv(buf.as_mut_slice()) {
+        println!("Received {n} bytes");
+
+        match serde_json::from_slice(&buf[0..n]) {
+            Ok(message) => {
+                let message: Message = message;
+                let _ = match message {
+                    Message::QueryMessage => handle_query_message(&state, &socket),
+                    Message::DownloadProcessMessage(m) => {
+                        handle_download_process_message(&state, m)
+                    }
+                };
             }
-            Err(err) => break,
-        }
+            Err(e) => eprintln!("{e:?}"),
+        };
     }
 
     Ok(())
@@ -220,7 +242,7 @@ pub fn run() -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use crate::subcommands::ytdl::ytdl_line::{DownloadProgress, YtdlLine};
-    use crate::subcommands::ytdl::{DownloadProcessMessage, MessagePayload};
+    use crate::subcommands::ytdl::MessagePayload;
 
     use super::*;
 
@@ -284,6 +306,7 @@ mod tests {
 
     #[test]
     fn processing_single_download() {
+        let socket = UnixDatagram::unbound().unwrap();
         let state: State = Arc::new(Mutex::new(BTreeMap::new()));
         let messages = create_messages(
             42,
@@ -301,18 +324,19 @@ mod tests {
         let last_message = create_messages(42, &mut [exited()]).pop().unwrap();
 
         for message in messages {
-            let _ = process_message(&state, message);
+            let _ = handle_message(&state, message, &socket);
         }
 
         assert_eq!(state.lock().unwrap().len(), 1);
 
-        let _ = process_message(&state, last_message);
+        let _ = handle_message(&state, last_message, &socket);
 
         assert_eq!(state.lock().unwrap().len(), 0);
     }
 
     #[test]
     fn processing_two_interleaved_downloads() {
+        let socket = UnixDatagram::unbound().unwrap();
         let state: State = Arc::new(Mutex::new(BTreeMap::new()));
         let messages1 = vec![
             create_message(42, url("url")),
@@ -347,19 +371,19 @@ mod tests {
         ];
 
         for message in messages1 {
-            let _ = process_message(&state, message);
+            let _ = handle_message(&state, message, &socket);
         }
 
         assert_eq!(state.lock().unwrap().len(), 2);
 
         for message in messages2 {
-            let _ = process_message(&state, message);
+            let _ = handle_message(&state, message, &socket);
         }
 
         assert_eq!(state.lock().unwrap().len(), 1);
 
         for message in messages3 {
-            let _ = process_message(&state, message);
+            let _ = handle_message(&state, message, &socket);
         }
 
         assert_eq!(state.lock().unwrap().len(), 0);
@@ -368,9 +392,10 @@ mod tests {
     #[test]
     #[should_panic]
     fn processing_out_of_order_path_message_fails() {
+        let socket = UnixDatagram::unbound().unwrap();
         let state: State = Arc::new(Mutex::new(BTreeMap::new()));
         let messages = create_messages(42, &mut [path("path")]);
 
-        process_message(&state, messages[0].clone()).unwrap();
+        handle_message(&state, messages[0].clone(), &socket).unwrap();
     }
 }
