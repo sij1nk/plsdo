@@ -4,9 +4,10 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
     fs::File,
-    io::{BufRead, BufReader, Read, Write},
-    os::unix::net::UnixStream,
+    io::{BufRead, BufReader},
+    os::unix::net::UnixDatagram,
     process::{Command as StdCommand, Stdio},
+    time::Duration,
 };
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
@@ -122,24 +123,25 @@ enum MessagePayload {
     ProcessExited(i32),
 }
 
-fn send_message(mut stream: &UnixStream, message: &Message) -> anyhow::Result<()> {
-    let mut string = serde_json::to_string(message)?;
-    string.push('\0');
-    stream.write_all(string.as_bytes())?;
-    // serde_json::to_writer(stream, message)?;
+fn send_message(socket: &UnixDatagram, message: &Message) -> anyhow::Result<()> {
+    let string = serde_json::to_string(message)?;
+    socket.send(string.as_bytes())?;
     Ok(())
 }
 
-fn send_query_message(mut stream: &UnixStream, message: &Message) -> anyhow::Result<String> {
-    send_message(stream, message)?;
-    let mut response = String::new();
-    stream.read_to_string(&mut response)?;
+fn send_query_message(socket: &UnixDatagram, message: &Message) -> anyhow::Result<String> {
+    send_message(socket, message)?;
+    // TODO: find optimal buffer size
+    let mut buf = vec![0; 1024];
+    // FIXME: hangs
+    socket.recv(buf.as_mut_slice())?;
+    let response = String::from_utf8(buf)?;
     Ok(response)
 }
 
 fn process_lines(
     pid: ProcessId,
-    stream: &UnixStream,
+    stream: &UnixDatagram,
     lines: impl Iterator<Item = std::io::Result<String>>,
 ) {
     for line in lines {
@@ -187,9 +189,16 @@ fn read_emulated_file(filename: &str) -> anyhow::Result<EmulatedFileContents> {
     Ok(contents)
 }
 
-fn connect_to_aggregator() -> anyhow::Result<UnixStream> {
-    UnixStream::connect(SYSTEM_ATLAS.ytdl_aggregator_socket)
-        .context("Cannot connect to the aggregator process; is it running?")
+fn connect_to_aggregator() -> anyhow::Result<UnixDatagram> {
+    let socket = UnixDatagram::unbound()?;
+    // NOTE: causes Resource temporarily unavailable (ecode 11) when reading query message response
+    // should look into how unix sockets work in depth...
+    // socket.set_read_timeout(Some(Duration::from_secs(1)))?;
+    // socket.set_write_timeout(Some(Duration::from_secs(1)))?;
+    socket
+        .connect(SYSTEM_ATLAS.ytdl_aggregator_socket)
+        .context("Cannot connect to the aggregator process; is it running?")?;
+    Ok(socket)
 }
 
 fn emulate_download(emulate_args: &ArgMatches) -> anyhow::Result<()> {
@@ -255,9 +264,9 @@ pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<Option<String>> {
         Some(("run_aggregator", _)) => aggregator::run()?,
         Some(("get_download_progress", _)) => {
             let message = Message::QueryMessage;
-            let stream = UnixStream::connect(SYSTEM_ATLAS.ytdl_aggregator_socket)?;
-            let response = send_query_message(&stream, &message)?;
-            // println!("{response}");
+            let socket = connect_to_aggregator()?;
+            let response = send_query_message(&socket, &message)?;
+            println!("{response}");
             return Ok(Some(response));
         }
         _ => {}
