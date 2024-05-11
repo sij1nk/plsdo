@@ -110,6 +110,7 @@ pub fn command_extension(cmd: Command) -> Command {
         .subcommands(inner_subcommands.iter())
 }
 
+#[derive(Debug)]
 struct OccupiedWorkspaceIds {
     inner: BTreeSet<WorkspaceId>,
 }
@@ -125,6 +126,10 @@ impl FromIterator<WorkspaceId> for OccupiedWorkspaceIds {
 impl Display for OccupiedWorkspaceIds {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let len = self.inner.len();
+        if len == 0 {
+            return Ok(());
+        }
+
         let mut iter = self.inner.iter();
         for _ in 0..len - 1 {
             write!(
@@ -173,6 +178,7 @@ fn write_workspace_state_to_backing_file() -> anyhow::Result<()> {
     let (primary_active_id, secondary_active_id) = get_active_workspace_ids()?;
 
     let occupied_workspace_ids = Clients::get()?
+        .into_iter()
         .map(|cl| cl.workspace.id)
         .filter(|&id| id > 0)
         .collect::<OccupiedWorkspaceIds>();
