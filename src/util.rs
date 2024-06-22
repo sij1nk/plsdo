@@ -22,29 +22,61 @@ pub enum ValueTier {
     High,
 }
 
-pub fn get_clipboard_contents_wayland() -> anyhow::Result<String> {
-    let result = get_contents(ClipboardType::Regular, Seat::Unspecified, MimeType::Text);
-    match result {
-        Ok((mut pipe, _)) => {
-            let mut contents = vec![];
-            pipe.read_to_end(&mut contents)?;
-            Ok(String::from_utf8_lossy(&contents).to_string())
+pub trait Clipboard {
+    fn get_one(&self) -> anyhow::Result<String>;
+    fn get_many(&self, n: u32) -> anyhow::Result<&[String]>;
+}
+
+pub struct RealClipboard {
+    wm: WM,
+}
+
+impl RealClipboard {
+    pub fn new(wm: WM) -> Self {
+        Self { wm }
+    }
+
+    fn get_one_wayland(&self) -> anyhow::Result<String> {
+        let result = get_contents(ClipboardType::Regular, Seat::Unspecified, MimeType::Text);
+        match result {
+            Ok((mut pipe, _)) => {
+                let mut contents = vec![];
+                pipe.read_to_end(&mut contents)?;
+                Ok(String::from_utf8_lossy(&contents).to_string())
+            }
+            Err(Error::NoSeats) | Err(Error::ClipboardEmpty) | Err(Error::NoMimeType) => {
+                Ok(String::new())
+            }
+            Err(err) => Err(err.into()),
         }
-        Err(Error::NoSeats) | Err(Error::ClipboardEmpty) | Err(Error::NoMimeType) => {
-            Ok(String::new())
-        }
-        Err(err) => Err(err.into()),
+    }
+
+    fn get_one_x11(&self) -> anyhow::Result<String> {
+        unimplemented!()
+    }
+
+    fn get_many_wayland(&self, _n: u32) -> anyhow::Result<&[String]> {
+        unimplemented!()
+    }
+
+    fn get_many_x11(&self, _n: u32) -> anyhow::Result<&[String]> {
+        unimplemented!()
     }
 }
 
-pub fn get_clipboard_contents_x11() -> anyhow::Result<String> {
-    unimplemented!()
-}
+impl Clipboard for RealClipboard {
+    fn get_one(&self) -> anyhow::Result<String> {
+        match self.wm {
+            WM::Hyprland => self.get_one_wayland(),
+            WM::GenericX11 => self.get_one_x11(),
+        }
+    }
 
-pub fn get_clipboard_contents() -> anyhow::Result<String> {
-    match determine_wm() {
-        WM::Hyprland => get_clipboard_contents_wayland(),
-        WM::GenericX11 => get_clipboard_contents_x11(),
+    fn get_many(&self, n: u32) -> anyhow::Result<&[String]> {
+        match self.wm {
+            WM::Hyprland => self.get_many_wayland(n),
+            WM::GenericX11 => self.get_many_x11(n),
+        }
     }
 }
 

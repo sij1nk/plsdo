@@ -7,7 +7,6 @@ use std::{
     io::{BufRead, BufReader},
     os::unix::net::UnixDatagram,
     process::{Command as StdCommand, Stdio},
-    time::Duration,
 };
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
@@ -15,7 +14,7 @@ use xshell::Shell;
 
 use crate::{
     system_atlas::SYSTEM_ATLAS,
-    util::{dmenu, get_clipboard_contents},
+    util::{determine_wm, dmenu, Clipboard, RealClipboard},
 };
 
 use self::ytdl_line::YtdlLine;
@@ -89,7 +88,10 @@ pub fn command_extension(cmd: Command) -> Command {
         .subcommands(inner_subcommands.iter())
 }
 
-fn get_download_url(download_args: &ArgMatches) -> anyhow::Result<String> {
+fn get_download_url(
+    download_args: &ArgMatches,
+    clipboard: impl Clipboard,
+) -> anyhow::Result<String> {
     match download_args.subcommand() {
         Some(("url", url_args)) => {
             let url_arg = url_args
@@ -98,7 +100,7 @@ fn get_download_url(download_args: &ArgMatches) -> anyhow::Result<String> {
             Ok(url_arg.clone())
         }
         Some(("clipboard", _)) => {
-            let string_from_clipboard = get_clipboard_contents()?;
+            let string_from_clipboard = clipboard.get_one()?;
             Ok(string_from_clipboard)
         }
         _ => panic!("Missing required subcommand for 'download'"),
@@ -214,8 +216,12 @@ fn emulate_download(emulate_args: &ArgMatches) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn download(sh: &Shell, download_args: &ArgMatches) -> anyhow::Result<()> {
-    let url = get_download_url(download_args)?;
+fn download(
+    sh: &Shell,
+    download_args: &ArgMatches,
+    clipboard: impl Clipboard,
+) -> anyhow::Result<()> {
+    let url = get_download_url(download_args, clipboard)?;
     let format = download_args
         .get_one::<DownloadFormat>("format")
         .copied()
@@ -258,8 +264,10 @@ fn download(sh: &Shell, download_args: &ArgMatches) -> anyhow::Result<()> {
 }
 
 pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<Option<String>> {
+    let wm = determine_wm();
+    let clipboard = RealClipboard::new(wm);
     match args.subcommand() {
-        Some(("download", download_args)) => download(sh, download_args)?,
+        Some(("download", download_args)) => download(sh, download_args, clipboard)?,
         Some(("emulate", emulate_args)) => emulate_download(emulate_args)?,
         Some(("run_aggregator", _)) => aggregator::run()?,
         Some(("get_download_progress", _)) => {
