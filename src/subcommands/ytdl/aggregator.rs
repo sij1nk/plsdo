@@ -219,24 +219,26 @@ pub fn run() -> anyhow::Result<()> {
     // TODO: what would be the optimal size?
     let mut buf = vec![0; 1024];
 
-    while let Ok(n) = socket.recv(buf.as_mut_slice()) {
-        println!("Received {n} bytes");
+    loop {
+        match socket.recv(buf.as_mut_slice()) {
+            Ok(n) => {
+                println!("Received {n} bytes");
 
-        match serde_json::from_slice(&buf[0..n]) {
-            Ok(message) => {
-                let message: Message = message;
-                let _ = match message {
-                    Message::QueryMessage => handle_query_message(&state, &socket),
-                    Message::DownloadProcessMessage(m) => {
-                        handle_download_process_message(&state, m)
+                match serde_json::from_slice::<Message>(&buf[0..n]) {
+                    Ok(message) => {
+                        let _ = match message {
+                            Message::QueryMessage => handle_query_message(&state, &socket),
+                            Message::DownloadProcessMessage(m) => {
+                                handle_download_process_message(&state, m)
+                            }
+                        };
                     }
+                    Err(e) => eprintln!("{e:?}"),
                 };
             }
-            Err(e) => eprintln!("{e:?}"),
-        };
+            Err(e) => return Err(e.into()),
+        }
     }
-
-    Ok(())
 }
 
 #[cfg(test)]
