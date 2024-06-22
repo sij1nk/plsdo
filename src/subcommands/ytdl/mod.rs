@@ -264,10 +264,12 @@ fn download(
 }
 
 pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<Option<String>> {
-    let wm = determine_wm();
-    let clipboard = RealClipboard::new(wm);
     match args.subcommand() {
-        Some(("download", download_args)) => download(sh, download_args, clipboard)?,
+        Some(("download", download_args)) => {
+            let wm = determine_wm();
+            let clipboard = RealClipboard::new(wm);
+            download(sh, download_args, clipboard)?
+        }
         Some(("emulate", emulate_args)) => emulate_download(emulate_args)?,
         Some(("run_aggregator", _)) => aggregator::run()?,
         Some(("get_download_progress", _)) => {
