@@ -149,6 +149,7 @@ impl Display for OccupiedWorkspaceIds {
 /// This assumes that exactly 2 monitors are connected.
 fn get_active_workspace_ids() -> anyhow::Result<(WorkspaceId, WorkspaceId)> {
     let mut active_workspace_ids = Monitors::get()?
+        .into_iter()
         .map(|mon| mon.active_workspace.id)
         .collect::<Vec<_>>();
     active_workspace_ids.sort_by(|&id1, _| {
@@ -360,8 +361,9 @@ fn open_pinned(args: &ArgMatches) -> anyhow::Result<()> {
         ));
     };
 
-    if let Some(already_running_program) =
-        Clients::get()?.find(|cl| cl.class == pinned_program.wm_class)
+    if let Some(already_running_program) = Clients::get()?
+        .into_iter()
+        .find(|cl| cl.class == pinned_program.wm_class)
     {
         let workspace_id = already_running_program.workspace.id;
         focus_workspace_by_id(workspace_id)?;
