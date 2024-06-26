@@ -110,6 +110,7 @@ pub fn command_extension(cmd: Command) -> Command {
         .subcommands(inner_subcommands.iter())
 }
 
+#[derive(Debug)]
 struct OccupiedWorkspaceIds {
     inner: BTreeSet<WorkspaceId>,
 }
@@ -125,6 +126,10 @@ impl FromIterator<WorkspaceId> for OccupiedWorkspaceIds {
 impl Display for OccupiedWorkspaceIds {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let len = self.inner.len();
+        if len == 0 {
+            return Ok(());
+        }
+
         let mut iter = self.inner.iter();
         for _ in 0..len - 1 {
             write!(
@@ -144,6 +149,7 @@ impl Display for OccupiedWorkspaceIds {
 /// This assumes that exactly 2 monitors are connected.
 fn get_active_workspace_ids() -> anyhow::Result<(WorkspaceId, WorkspaceId)> {
     let mut active_workspace_ids = Monitors::get()?
+        .into_iter()
         .map(|mon| mon.active_workspace.id)
         .collect::<Vec<_>>();
     active_workspace_ids.sort_by(|&id1, _| {
@@ -173,6 +179,7 @@ fn write_workspace_state_to_backing_file() -> anyhow::Result<()> {
     let (primary_active_id, secondary_active_id) = get_active_workspace_ids()?;
 
     let occupied_workspace_ids = Clients::get()?
+        .into_iter()
         .map(|cl| cl.workspace.id)
         .filter(|&id| id > 0)
         .collect::<OccupiedWorkspaceIds>();
@@ -295,7 +302,8 @@ fn focus_workspace(sh: &Shell, args: &ArgMatches, move_window: bool) -> anyhow::
             let id = id_args
                 .get_one::<WorkspaceId>("WORKSPACE")
                 .expect("WORKSPACE should be a required argument");
-            focus_workspace_by_id(*id)?;
+            let dispatch = get_focus_workspace_dispatcher(*id, move_window);
+            Dispatch::call(dispatch)?;
         }
         _ => return Ok(()),
     };
@@ -353,8 +361,9 @@ fn open_pinned(args: &ArgMatches) -> anyhow::Result<()> {
         ));
     };
 
-    if let Some(already_running_program) =
-        Clients::get()?.find(|cl| cl.class == pinned_program.wm_class)
+    if let Some(already_running_program) = Clients::get()?
+        .into_iter()
+        .find(|cl| cl.class == pinned_program.wm_class)
     {
         let workspace_id = already_running_program.workspace.id;
         focus_workspace_by_id(workspace_id)?;
