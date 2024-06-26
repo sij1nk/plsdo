@@ -225,6 +225,7 @@ fn download(
     let format = download_args
         .get_one::<DownloadFormat>("format")
         .copied()
+        // this error is never returned, but we have to give it something for the Option -> Result conversion
         .ok_or(anyhow::anyhow!("Download format was not specified"))
         .or_else(|_| {
             let formats: Vec<_> = DownloadFormat::iter().map(|opt| opt.to_string()).collect();
@@ -246,15 +247,18 @@ fn download(
         )
         .stdout(Stdio::piped())
         .spawn()
-        .expect("it to work");
-    let stdout = child.stdout.take().expect("Child should have stdout");
+        .expect("it to work"); // TODO: return error instead of panic
+    let stdout = child.stdout.take().expect("Child should have stdout"); // TODO: return error instead of panic
     let bufreader = BufReader::new(stdout);
     let pid = child.id();
     let stream = connect_to_aggregator()?;
+    // TODO: consider mapping to parsed lines, and send separately
     process_lines(pid, &stream, bufreader.lines());
 
-    let ecode = child.wait().expect("wait on child failed");
+    let ecode = child.wait().expect("wait on child failed"); // TODO: return error instead of panic
     let ecode = ecode.code().unwrap_or(1);
+
+    // TODO: extract
     let message = Message::DownloadProcessMessage(DownloadProcessMessage {
         pid,
         payload: MessagePayload::ProcessExited(ecode),
