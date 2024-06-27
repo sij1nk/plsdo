@@ -14,6 +14,8 @@ use hyprland::{
 };
 use xshell::{cmd, Shell};
 
+mod listener;
+
 use crate::system_atlas::SYSTEM_ATLAS;
 
 /// A program whose window is pinned to a specific workspace. The window should always be opened on
@@ -27,11 +29,10 @@ use crate::system_atlas::SYSTEM_ATLAS;
 struct PinnedProgram<'a> {
     name: &'a str,
     wm_class: &'a str,
-    workspace_id: WorkspaceId,
 }
 
 pub fn command_extension(cmd: Command) -> Command {
-    let inner_subcommands =[
+    let inner_subcommands = [
         Command::new("focus")
             .about("Move focus to the specified workspace")
             .arg_required_else_help(true)
@@ -104,6 +105,8 @@ pub fn command_extension(cmd: Command) -> Command {
             .about("Open and navigate to a pinned window")
             .arg_required_else_help(true)
             .arg(arg!([PROGRAM] "The name of the program whose pinned window to navigate to")),
+        Command::new("run_listener")
+            .about("Launch the hypr event listener process")
     ];
     cmd.subcommand_required(true)
         .arg_required_else_help(true)
@@ -198,9 +201,10 @@ fn write_workspace_state_to_backing_file() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn focus_workspace_by_id(id: WorkspaceId) -> anyhow::Result<()> {
-    let dispatch =
-        DispatchType::Workspace(hyprland::dispatch::WorkspaceIdentifierWithSpecial::Id(id));
+fn focus_window_by_wm_class(wm_class: &str) -> anyhow::Result<()> {
+    let dispatch = DispatchType::FocusWindow(
+        hyprland::dispatch::WindowIdentifier::ClassRegularExpression(wm_class),
+    );
     Dispatch::call(dispatch)?;
     Ok(())
 }
@@ -322,32 +326,26 @@ fn open_pinned(args: &ArgMatches) -> anyhow::Result<()> {
         PinnedProgram {
             name: "newsboat",
             wm_class: "newsboat",
-            workspace_id: 5,
         },
         PinnedProgram {
             name: "ncmpcpp",
             wm_class: "ncmpcpp",
-            workspace_id: 6,
         },
         PinnedProgram {
             name: "btop",
             wm_class: "btop",
-            workspace_id: 7,
         },
         PinnedProgram {
             name: "pulsemixer",
             wm_class: "pulsemixer",
-            workspace_id: 7,
         },
         PinnedProgram {
             name: "notes",
             wm_class: "notes",
-            workspace_id: 8,
         },
         PinnedProgram {
             name: "Firefox Web Browser",
             wm_class: "firefox",
-            workspace_id: 10,
         },
     ];
 
@@ -365,8 +363,7 @@ fn open_pinned(args: &ArgMatches) -> anyhow::Result<()> {
         .into_iter()
         .find(|cl| cl.class == pinned_program.wm_class)
     {
-        let workspace_id = already_running_program.workspace.id;
-        focus_workspace_by_id(workspace_id)?;
+        focus_window_by_wm_class(&already_running_program.class)?;
     } else {
         let appinfos = AppInfo::all();
         let Some(appinfo) = appinfos
@@ -379,8 +376,9 @@ fn open_pinned(args: &ArgMatches) -> anyhow::Result<()> {
             ));
         };
 
-        focus_workspace_by_id(pinned_program.workspace_id)?;
+        // focus_workspace_by_id(pinned_program.workspace_id)?;
         appinfo.launch(&[], AppLaunchContext::NONE)?;
+        focus_window_by_wm_class(pinned_program.wm_class)?;
     };
 
     write_workspace_state_to_backing_file()?;
@@ -393,6 +391,7 @@ pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
         Some(("focus", focus_args)) => focus_workspace(sh, focus_args, false),
         Some(("move", move_args)) => focus_workspace(sh, move_args, true),
         Some(("open_pinned", open_pinned_args)) => open_pinned(open_pinned_args),
+        Some(("run_listener", run_listener_args)) => listener::run(run_listener_args),
         _ => Ok(()),
     }?;
 

@@ -19,3 +19,4 @@ toml = "0.8"
 hyprland = { git = "https://github.com/hyprland-community/hyprland-rs.git" }
 gio = "0.18.4"
 dbus = "0.9.7"
+fd-lock = "4.0.2"
