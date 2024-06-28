@@ -1,10 +1,3 @@
-use std::{
-    collections::BTreeSet,
-    fmt::Display,
-    fs::OpenOptions,
-    io::{LineWriter, Write},
-};
-
 use clap::{arg, value_parser, ArgMatches, Command};
 use gio::{prelude::AppInfoExt, AppInfo, AppLaunchContext};
 use hyprland::{
@@ -14,7 +7,7 @@ use hyprland::{
 };
 use xshell::{cmd, Shell};
 
-use crate::system_atlas::SYSTEM_ATLAS;
+mod listener;
 
 /// A program whose window is pinned to a specific workspace. The window should always be opened on
 /// this workspace, but can be freely moved to other workspaces afterwards. Opening the pinned
@@ -27,11 +20,10 @@ use crate::system_atlas::SYSTEM_ATLAS;
 struct PinnedProgram<'a> {
     name: &'a str,
     wm_class: &'a str,
-    workspace_id: WorkspaceId,
 }
 
 pub fn command_extension(cmd: Command) -> Command {
-    let inner_subcommands =[
+    let inner_subcommands = [
         Command::new("focus")
             .about("Move focus to the specified workspace")
             .arg_required_else_help(true)
@@ -104,103 +96,18 @@ pub fn command_extension(cmd: Command) -> Command {
             .about("Open and navigate to a pinned window")
             .arg_required_else_help(true)
             .arg(arg!([PROGRAM] "The name of the program whose pinned window to navigate to")),
+        Command::new("run_listener")
+            .about("Launch the hypr event listener process")
     ];
     cmd.subcommand_required(true)
         .arg_required_else_help(true)
         .subcommands(inner_subcommands.iter())
 }
 
-#[derive(Debug)]
-struct OccupiedWorkspaceIds {
-    inner: BTreeSet<WorkspaceId>,
-}
-
-impl FromIterator<WorkspaceId> for OccupiedWorkspaceIds {
-    fn from_iter<T: IntoIterator<Item = WorkspaceId>>(iter: T) -> Self {
-        Self {
-            inner: BTreeSet::from_iter(iter),
-        }
-    }
-}
-
-impl Display for OccupiedWorkspaceIds {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let len = self.inner.len();
-        if len == 0 {
-            return Ok(());
-        }
-
-        let mut iter = self.inner.iter();
-        for _ in 0..len - 1 {
-            write!(
-                f,
-                "{},",
-                iter.next()
-                    .expect("The item should exist, because we're within bounds")
-            )?;
-        }
-        write!(f, "{}", iter.next().expect("The last item should exist"))?;
-
-        Ok(())
-    }
-}
-
-/// Get the active workspace ids for the primary and secondary monitor.
-/// This assumes that exactly 2 monitors are connected.
-fn get_active_workspace_ids() -> anyhow::Result<(WorkspaceId, WorkspaceId)> {
-    let mut active_workspace_ids = Monitors::get()?
-        .into_iter()
-        .map(|mon| mon.active_workspace.id)
-        .collect::<Vec<_>>();
-    active_workspace_ids.sort_by(|&id1, _| {
-        if id1 % 2 == 1 {
-            std::cmp::Ordering::Less
-        } else {
-            std::cmp::Ordering::Greater
-        }
-    });
-
-    let primary = active_workspace_ids
-        .first()
-        .ok_or(anyhow::anyhow!("Found no active workspaces, expected two"))?;
-    let secondary = active_workspace_ids.get(1).ok_or(anyhow::anyhow!(
-        "Only found one active workspace, expected two"
-    ))?;
-
-    Ok((*primary, *secondary))
-}
-
-/// Append the state of the workspaces to a file, from which the eww workspaces widget can read it
-/// from. The output should be the following JSON array:
-/// `[<active_secondary_workspace>,<active_primary_workspace>,[<occupied_workspace>...]]`
-/// Odd numbered workspaces belong to the primary monitor; even numbered workspaces belong to the
-/// secondary one.
-fn write_workspace_state_to_backing_file() -> anyhow::Result<()> {
-    let (primary_active_id, secondary_active_id) = get_active_workspace_ids()?;
-
-    let occupied_workspace_ids = Clients::get()?
-        .into_iter()
-        .map(|cl| cl.workspace.id)
-        .filter(|&id| id > 0)
-        .collect::<OccupiedWorkspaceIds>();
-
-    let file = OpenOptions::new()
-        .create(false)
-        .append(true)
-        .open(SYSTEM_ATLAS.eww_workspaces)?;
-    let mut writer = LineWriter::new(&file);
-    writeln!(
-        writer,
-        "[{},{},[{}]]",
-        secondary_active_id, primary_active_id, occupied_workspace_ids
-    )?;
-
-    Ok(())
-}
-
-fn focus_workspace_by_id(id: WorkspaceId) -> anyhow::Result<()> {
-    let dispatch =
-        DispatchType::Workspace(hyprland::dispatch::WorkspaceIdentifierWithSpecial::Id(id));
+fn focus_window_by_wm_class(wm_class: &str) -> anyhow::Result<()> {
+    let dispatch = DispatchType::FocusWindow(
+        hyprland::dispatch::WindowIdentifier::ClassRegularExpression(wm_class),
+    );
     Dispatch::call(dispatch)?;
     Ok(())
 }
@@ -308,8 +215,6 @@ fn focus_workspace(sh: &Shell, args: &ArgMatches, move_window: bool) -> anyhow::
         _ => return Ok(()),
     };
 
-    write_workspace_state_to_backing_file()?;
-
     Ok(())
 }
 
@@ -322,32 +227,26 @@ fn open_pinned(args: &ArgMatches) -> anyhow::Result<()> {
         PinnedProgram {
             name: "newsboat",
             wm_class: "newsboat",
-            workspace_id: 5,
         },
         PinnedProgram {
             name: "ncmpcpp",
             wm_class: "ncmpcpp",
-            workspace_id: 6,
         },
         PinnedProgram {
             name: "btop",
             wm_class: "btop",
-            workspace_id: 7,
         },
         PinnedProgram {
             name: "pulsemixer",
             wm_class: "pulsemixer",
-            workspace_id: 7,
         },
         PinnedProgram {
             name: "notes",
             wm_class: "notes",
-            workspace_id: 8,
         },
         PinnedProgram {
             name: "Firefox Web Browser",
             wm_class: "firefox",
-            workspace_id: 10,
         },
     ];
 
@@ -365,8 +264,7 @@ fn open_pinned(args: &ArgMatches) -> anyhow::Result<()> {
         .into_iter()
         .find(|cl| cl.class == pinned_program.wm_class)
     {
-        let workspace_id = already_running_program.workspace.id;
-        focus_workspace_by_id(workspace_id)?;
+        focus_window_by_wm_class(&already_running_program.class)?;
     } else {
         let appinfos = AppInfo::all();
         let Some(appinfo) = appinfos
@@ -379,13 +277,37 @@ fn open_pinned(args: &ArgMatches) -> anyhow::Result<()> {
             ));
         };
 
-        focus_workspace_by_id(pinned_program.workspace_id)?;
+        // focus_workspace_by_id(pinned_program.workspace_id)?;
         appinfo.launch(&[], AppLaunchContext::NONE)?;
+        focus_window_by_wm_class(pinned_program.wm_class)?;
     };
 
-    write_workspace_state_to_backing_file()?;
-
     Ok(())
+}
+
+/// Get the active workspace ids for the primary and secondary monitor.
+/// This assumes that exactly 2 monitors are connected.
+pub fn get_active_workspace_ids() -> anyhow::Result<(WorkspaceId, WorkspaceId)> {
+    let mut active_workspace_ids = Monitors::get()?
+        .into_iter()
+        .map(|mon| mon.active_workspace.id)
+        .collect::<Vec<_>>();
+    active_workspace_ids.sort_by(|&id1, _| {
+        if id1 % 2 == 1 {
+            std::cmp::Ordering::Less
+        } else {
+            std::cmp::Ordering::Greater
+        }
+    });
+
+    let primary = active_workspace_ids
+        .first()
+        .ok_or(anyhow::anyhow!("Found no active workspaces, expected two"))?;
+    let secondary = active_workspace_ids.get(1).ok_or(anyhow::anyhow!(
+        "Only found one active workspace, expected two"
+    ))?;
+
+    Ok((*primary, *secondary))
 }
 
 pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<Option<String>> {
@@ -393,6 +315,7 @@ pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<Option<String>> {
         Some(("focus", focus_args)) => focus_workspace(sh, focus_args, false),
         Some(("move", move_args)) => focus_workspace(sh, move_args, true),
         Some(("open_pinned", open_pinned_args)) => open_pinned(open_pinned_args),
+        Some(("run_listener", run_listener_args)) => listener::run(run_listener_args),
         _ => Ok(()),
     }?;
 
