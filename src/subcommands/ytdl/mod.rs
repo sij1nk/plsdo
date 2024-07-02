@@ -6,7 +6,6 @@ use std::{
     fs::File,
     io::{BufRead, BufReader},
     os::unix::net::UnixDatagram,
-    process::{Command as StdCommand, Stdio},
 };
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
@@ -17,9 +16,13 @@ use crate::{
     util::{determine_wm, dmenu, Clipboard, RealClipboard},
 };
 
-use self::ytdl_line::YtdlLine;
+use self::{
+    downloader::{DownloadWaitHandle, Downloader, YtdlDownloader},
+    ytdl_line::YtdlLine,
+};
 
 mod aggregator;
+mod downloader;
 mod test_macros;
 mod ytdl_line;
 
@@ -48,21 +51,6 @@ enum DownloadFormat {
     #[clap(name = "audio-only")]
     #[strum(serialize = "audio-only")]
     AudioOnly,
-}
-
-fn get_download_format_specifier(format: &DownloadFormat) -> &'static [&'static str] {
-    match format {
-        DownloadFormat::UpTo1440p => {
-            &["-f", "bestvideo[height<=1440]+bestaudio/best[height<=1440]"]
-        }
-        DownloadFormat::UpTo1080p => {
-            &["-f", "bestvideo[height<=1080]+bestaudio/best[height<=1080]"]
-        }
-        DownloadFormat::UpTo720p => &["-f", "bestvideo[height<=720]+bestaudio/best[height<=720]"],
-        DownloadFormat::UpTo480p => &["-f", "bestvideo[height<=480]+bestaudio/best[height<=480]"],
-        DownloadFormat::WorstVideo => &["-S", "+size,+br,+res,+fps"],
-        DownloadFormat::AudioOnly => &["-x", "--audio-format", "mp3"],
-    }
 }
 
 pub fn command_extension(cmd: Command) -> Command {
@@ -105,6 +93,21 @@ fn get_download_url(
         }
         _ => panic!("Missing required subcommand for 'download'"),
     }
+}
+
+// TODO: get dmenu as impl trait parameter
+fn get_download_format(download_args: &ArgMatches, sh: &Shell) -> anyhow::Result<DownloadFormat> {
+    download_args
+        .get_one::<DownloadFormat>("format")
+        .copied()
+        // this error is never returned, but we have to give it something for the Option -> Result conversion
+        .ok_or(anyhow::anyhow!("Download format was not specified"))
+        .or_else(|_| {
+            let formats: Vec<_> = DownloadFormat::iter().map(|opt| opt.to_string()).collect();
+            dmenu(sh, "Choose download format", &formats, true).and_then(|value| {
+                DownloadFormat::from_str(&value, true).map_err(|e| anyhow::anyhow!(e))
+            })
+        })
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -220,42 +223,18 @@ fn download(
     sh: &Shell,
     download_args: &ArgMatches,
     clipboard: impl Clipboard,
+    downloader: impl Downloader,
 ) -> anyhow::Result<()> {
     let url = get_download_url(download_args, clipboard)?;
-    let format = download_args
-        .get_one::<DownloadFormat>("format")
-        .copied()
-        // this error is never returned, but we have to give it something for the Option -> Result conversion
-        .ok_or(anyhow::anyhow!("Download format was not specified"))
-        .or_else(|_| {
-            let formats: Vec<_> = DownloadFormat::iter().map(|opt| opt.to_string()).collect();
-            dmenu(sh, "Choose download format", &formats, true).and_then(|value| {
-                DownloadFormat::from_str(&value, true).map_err(|e| anyhow::anyhow!(e))
-            })
-        })?;
+    let format = get_download_format(download_args, sh)?;
 
-    println!("{:?}", format);
-    let format_specifier = get_download_format_specifier(&format);
+    let (pid, stdout_lines, wait_handle) = downloader.download(url, &format)?;
 
-    let mut child = StdCommand::new("yt-dlp")
-        .args(
-            [
-                format_specifier,
-                &["--progress", "--newline", "-r", "16384", &url],
-            ]
-            .concat(),
-        )
-        .stdout(Stdio::piped())
-        .spawn()
-        .expect("it to work"); // TODO: return error instead of panic
-    let stdout = child.stdout.take().expect("Child should have stdout"); // TODO: return error instead of panic
-    let bufreader = BufReader::new(stdout);
-    let pid = child.id();
     let stream = connect_to_aggregator()?;
     // TODO: consider mapping to parsed lines, and send separately
-    process_lines(pid, &stream, bufreader.lines());
+    process_lines(pid, &stream, stdout_lines);
 
-    let ecode = child.wait().expect("wait on child failed"); // TODO: return error instead of panic
+    let ecode = wait_handle.wait().expect("wait on child failed"); // TODO: return error instead of panic
     let ecode = ecode.code().unwrap_or(1);
 
     // TODO: extract
@@ -272,7 +251,8 @@ pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<Option<String>> {
         Some(("download", download_args)) => {
             let wm = determine_wm();
             let clipboard = RealClipboard::new(wm);
-            download(sh, download_args, clipboard)?
+            let downloader = YtdlDownloader::new();
+            download(sh, download_args, clipboard, downloader)?
         }
         Some(("emulate", emulate_args)) => emulate_download(emulate_args)?,
         Some(("run_aggregator", _)) => aggregator::run()?,
