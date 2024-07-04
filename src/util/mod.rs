@@ -5,21 +5,13 @@ use std::fs::{File, OpenOptions};
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::Path;
 
-use anyhow::Context;
+pub mod dmenu;
 use wl_clipboard_rs::paste::{get_contents, ClipboardType, Error, MimeType, Seat};
-use xshell::{cmd, Shell};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum WM {
     Hyprland,
     GenericX11,
-}
-
-pub enum ValueTier {
-    None,
-    Low,
-    Medium,
-    High,
 }
 
 pub trait Clipboard {
@@ -92,52 +84,6 @@ pub fn determine_wm() -> WM {
     } else {
         WM::GenericX11
     }
-}
-
-fn dmenu_inner_x11(sh: &Shell, prompt: &str, choices_joined: &str) -> anyhow::Result<String> {
-    Ok(
-        cmd!(sh, "dmenu -p {prompt} -i -l 10 -fn 'monospace:size=24'")
-            .stdin(choices_joined)
-            .read()?,
-    )
-}
-
-pub fn dmenu<T>(
-    sh: &Shell,
-    prompt: &str,
-    choices: &[T],
-    forbid_invalid: bool,
-) -> anyhow::Result<String>
-where
-    T: AsRef<str>,
-{
-    let choices_joined = choices
-        .iter()
-        .map(|c| c.as_ref())
-        .collect::<Vec<_>>()
-        .join("\n");
-
-    let chosen: anyhow::Result<String> =
-        if let Some((_, session_type)) = std::env::vars().find(|(k, _)| k == "XDG_SESSION_TYPE") {
-            if session_type == "wayland" {
-                cmd!(sh, "wofi -d --prompt {prompt}")
-                    .stdin(&choices_joined)
-                    .read()
-                    .map_err(anyhow::Error::new)
-            } else {
-                dmenu_inner_x11(sh, prompt, &choices_joined)
-            }
-        } else {
-            dmenu_inner_x11(sh, prompt, &choices_joined)
-        };
-
-    let chosen = chosen.context("Aborted")?;
-
-    if forbid_invalid && !choices_joined.contains(&chosen) {
-        return Err(anyhow::anyhow!("Invalid input given"));
-    }
-
-    Ok(chosen)
 }
 
 pub fn modify_file<F>(path: &str, splitter: &str, modifier: F) -> anyhow::Result<()>
