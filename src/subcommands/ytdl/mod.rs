@@ -6,6 +6,7 @@ use std::{
     fs::File,
     io::{BufRead, BufReader},
     os::unix::net::UnixDatagram,
+    time::Duration,
 };
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
@@ -150,7 +151,8 @@ fn send_query_message(socket: &UnixDatagram, message: &Message) -> anyhow::Resul
     // TODO: find optimal buffer size
     let mut buf = vec![0; 1024];
     // FIXME: hangs
-    socket.recv(buf.as_mut_slice())?;
+    let _ = socket.recv(buf.as_mut_slice());
+    println!("Query: received answer");
     let response = String::from_utf8(buf)?;
     Ok(response)
 }
@@ -205,12 +207,11 @@ fn read_emulated_file(filename: &str) -> anyhow::Result<EmulatedFileContents> {
     Ok(contents)
 }
 
-fn connect_to_aggregator() -> anyhow::Result<UnixDatagram> {
-    let socket = UnixDatagram::unbound()?;
-    // NOTE: causes Resource temporarily unavailable (ecode 11) when reading query message response
-    // should look into how unix sockets work in depth...
-    // socket.set_read_timeout(Some(Duration::from_secs(1)))?;
-    // socket.set_write_timeout(Some(Duration::from_secs(1)))?;
+fn connect_to_aggregator(path: Option<&str>) -> anyhow::Result<UnixDatagram> {
+    let socket = match path {
+        Some(str) => UnixDatagram::bind(str),
+        None => UnixDatagram::unbound(),
+    }?;
     socket
         .connect(SYSTEM_ATLAS.ytdl_aggregator_socket)
         .context("Cannot connect to the aggregator process; is it running?")?;
@@ -221,7 +222,7 @@ fn emulate_download(emulate_args: &ArgMatches) -> anyhow::Result<()> {
     let filename = emulate_args
         .get_one::<String>("FILE")
         .expect("FILE should be a required argument");
-    let stream = connect_to_aggregator()?;
+    let stream = connect_to_aggregator(None)?;
     let contents = read_emulated_file(filename)?;
     for (pid, lines) in contents {
         process_lines(pid, &stream, lines.into_iter().map(Ok));
@@ -242,8 +243,7 @@ fn download(
 
     let (pid, stdout_lines, wait_handle) = downloader.download(url, &format)?;
 
-    let stream = connect_to_aggregator()?;
-    // TODO: consider mapping to parsed lines, and send separately
+    let stream = connect_to_aggregator(None)?;
     process_lines(pid, &stream, stdout_lines);
 
     let ecode = wait_handle.wait().expect("wait on child failed"); // TODO: return error instead of panic
@@ -270,8 +270,10 @@ pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<Option<String>> {
         Some(("run_aggregator", _)) => aggregator::run()?,
         Some(("get_download_progress", _)) => {
             let message = Message::QueryMessage;
-            let socket = connect_to_aggregator()?;
+            let socket_path = generate_socket_path();
+            let socket = connect_to_aggregator(Some(&socket_path))?;
             let response = send_query_message(&socket, &message)?;
+            println!("Response:");
             println!("{response}");
             return Ok(Some(response));
         }
@@ -279,6 +281,14 @@ pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<Option<String>> {
     }
 
     Ok(None)
+}
+
+fn generate_socket_path() -> String {
+    let secs_since_epoch = std::time::SystemTime::UNIX_EPOCH
+        .elapsed()
+        .expect("UNIX_EPOCH is later than current system time")
+        .as_secs();
+    format!("/tmp/plsdo-ytdl-download-process-{secs_since_epoch}")
 }
 
 #[cfg(test)]

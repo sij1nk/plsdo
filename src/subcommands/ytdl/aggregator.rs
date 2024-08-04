@@ -91,12 +91,13 @@ enum DownloadInfo {
 fn handle_query_message(state: &State, socket: &UnixDatagram) -> anyhow::Result<()> {
     let state = state.lock().expect("lock to work");
     let state_string = serde_json::to_string_pretty(&*state)?;
-    println!("{state_string}");
+    println!("State string: {state_string}");
     socket.send(state_string.as_bytes())?;
     Ok(())
 }
 
 fn handle_message(state: &State, message: Message, socket: &UnixDatagram) -> anyhow::Result<()> {
+    println!("Message: {:?}", message);
     match message {
         Message::QueryMessage => handle_query_message(state, socket),
         Message::DownloadProcessMessage(message) => handle_download_process_message(state, message),
@@ -222,16 +223,11 @@ pub fn run() -> anyhow::Result<()> {
     loop {
         match socket.recv(buf.as_mut_slice()) {
             Ok(n) => {
-                println!("Received {n} bytes");
+                println!("Aggregator: Received {n} bytes");
 
                 match serde_json::from_slice::<Message>(&buf[0..n]) {
                     Ok(message) => {
-                        let _ = match message {
-                            Message::QueryMessage => handle_query_message(&state, &socket),
-                            Message::DownloadProcessMessage(m) => {
-                                handle_download_process_message(&state, m)
-                            }
-                        };
+                        let _ = handle_message(&state, message, &socket);
                     }
                     Err(e) => eprintln!("{e:?}"),
                 };
