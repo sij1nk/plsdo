@@ -525,7 +525,7 @@ dependencies = [
 [[package]]
 name = "hyprland"
 version = "0.4.0-alpha.2"
-source = "git+https://github.com/hyprland-community/hyprland-rs.git#6c4f1d032bdb655bd9b275ec1e727f89323e166b"
+source = "git+https://github.com/hyprland-community/hyprland-rs.git#116305ab39c69b72e9f19162c4264dbec86be5dd"
 dependencies = [
  "ahash",
  "derive_more",
@@ -543,7 +543,7 @@ dependencies = [
 [[package]]
 name = "hyprland-macros"
 version = "0.4.0-alpha.2"
-source = "git+https://github.com/hyprland-community/hyprland-rs.git#6c4f1d032bdb655bd9b275ec1e727f89323e166b"
+source = "git+https://github.com/hyprland-community/hyprland-rs.git#116305ab39c69b72e9f19162c4264dbec86be5dd"
 dependencies = [
  "quote",
  "syn 2.0.68",
@@ -593,7 +593,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4979f22fdb869068da03c9f7528f8297c6fd2606bc3a4affe42e6a823fdb8da4"
 dependencies = [
  "cfg-if",
- "windows-targets 0.48.5",
+ "windows-targets 0.52.6",
 ]
 
 [[package]]

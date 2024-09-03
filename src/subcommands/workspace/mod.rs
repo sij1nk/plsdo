@@ -1,3 +1,4 @@
+use anyhow::Context;
 use clap::{arg, value_parser, ArgMatches, Command};
 use gio::{prelude::AppInfoExt, AppInfo, AppLaunchContext};
 use hyprland::{
@@ -108,7 +109,8 @@ fn focus_window_by_wm_class(wm_class: &str) -> anyhow::Result<()> {
     let dispatch = DispatchType::FocusWindow(
         hyprland::dispatch::WindowIdentifier::ClassRegularExpression(wm_class),
     );
-    Dispatch::call(dispatch)?;
+    Dispatch::call(dispatch)
+        .with_context(|| format!("Could not focus window by wm_class: {}", wm_class))?;
     Ok(())
 }
 
@@ -260,7 +262,8 @@ fn open_pinned(args: &ArgMatches) -> anyhow::Result<()> {
         ));
     };
 
-    if let Some(already_running_program) = Clients::get()?
+    if let Some(already_running_program) = Clients::get()
+        .context("Failed to get hyprland clients")?
         .into_iter()
         .find(|cl| cl.class == pinned_program.wm_class)
     {
@@ -278,7 +281,9 @@ fn open_pinned(args: &ArgMatches) -> anyhow::Result<()> {
         };
 
         // focus_workspace_by_id(pinned_program.workspace_id)?;
-        appinfo.launch(&[], AppLaunchContext::NONE)?;
+        appinfo
+            .launch(&[], AppLaunchContext::NONE)
+            .context("Failed to launch pinned program")?;
         focus_window_by_wm_class(pinned_program.wm_class)?;
     };
 
