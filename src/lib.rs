@@ -16,7 +16,6 @@ pub type Script = fn(&Shell, &ArgMatches) -> anyhow::Result<Option<String>>;
 // Each plsdo subcommand can be invoked as a subcommand on the plsdo command. Subcommands are
 // expected to live under the `subcommands` folder, and must provide implementations for the `run`
 // and `command_extension` functions.
-// TODO: more flexibility may be needed later (e.g. subcommands broken into multiple source files)
 define_subcommands!([
     (power, "Shut down, reboot or suspend the machine"),
     (keyboard_layout, "Change the keyboard layout"),
