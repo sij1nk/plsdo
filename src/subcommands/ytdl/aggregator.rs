@@ -1,7 +1,7 @@
 use std::{
     collections::BTreeMap,
     fs,
-    os::unix::net::UnixDatagram,
+    os::unix::net::{SocketAddr, UnixDatagram},
     path::Path,
     sync::{Arc, Mutex},
 };
@@ -88,18 +88,30 @@ enum DownloadInfo {
     Full(FullDownloadInfo),
 }
 
-fn handle_query_message(state: &State, socket: &UnixDatagram) -> anyhow::Result<()> {
+fn handle_query_message(
+    state: &State,
+    socket: &UnixDatagram,
+    other_socket_addr: &SocketAddr,
+) -> anyhow::Result<()> {
     let state = state.lock().expect("lock to work");
     let state_string = serde_json::to_string_pretty(&*state)?;
     println!("State string: {state_string}");
-    socket.send(state_string.as_bytes())?;
+    socket.send_to(
+        state_string.as_bytes(),
+        other_socket_addr.as_pathname().unwrap(),
+    )?;
     Ok(())
 }
 
-fn handle_message(state: &State, message: Message, socket: &UnixDatagram) -> anyhow::Result<()> {
+fn handle_message(
+    state: &State,
+    message: Message,
+    socket: &UnixDatagram,
+    other_socket_addr: &SocketAddr,
+) -> anyhow::Result<()> {
     println!("Message: {:?}", message);
     match message {
-        Message::QueryMessage => handle_query_message(state, socket),
+        Message::QueryMessage => handle_query_message(state, socket, other_socket_addr),
         Message::DownloadProcessMessage(message) => handle_download_process_message(state, message),
     }
 }
@@ -221,13 +233,13 @@ pub fn run() -> anyhow::Result<()> {
     let mut buf = vec![0; 1024];
 
     loop {
-        match socket.recv(buf.as_mut_slice()) {
-            Ok(n) => {
+        match socket.recv_from(buf.as_mut_slice()) {
+            Ok((n, other_socket)) => {
                 println!("Aggregator: Received {n} bytes");
 
                 match serde_json::from_slice::<Message>(&buf[0..n]) {
                     Ok(message) => {
-                        let _ = handle_message(&state, message, &socket);
+                        let _ = handle_message(&state, message, &socket, &other_socket);
                     }
                     Err(e) => eprintln!("{e:?}"),
                 };
@@ -238,11 +250,18 @@ pub fn run() -> anyhow::Result<()> {
 }
 
 #[cfg(test)]
+#[allow(clippy::declare_interior_mutable_const)]
+#[allow(clippy::borrow_interior_mutable_const)]
 mod tests {
+    use std::cell::LazyCell;
+
     use crate::subcommands::ytdl::ytdl_line::{DownloadProgress, YtdlLine};
     use crate::subcommands::ytdl::MessagePayload;
 
     use super::*;
+
+    const OTHER_ADDR: LazyCell<SocketAddr> =
+        LazyCell::new(|| SocketAddr::from_pathname("/some/path").unwrap());
 
     fn create_message(pid: u32, mut message: DownloadProcessMessage) -> Message {
         message.pid = pid;
@@ -322,12 +341,12 @@ mod tests {
         let last_message = create_messages(42, &mut [exited()]).pop().unwrap();
 
         for message in messages {
-            let _ = handle_message(&state, message, &socket);
+            let _ = handle_message(&state, message, &socket, &OTHER_ADDR);
         }
 
         assert_eq!(state.lock().unwrap().len(), 1);
 
-        let _ = handle_message(&state, last_message, &socket);
+        let _ = handle_message(&state, last_message, &socket, &OTHER_ADDR);
 
         assert_eq!(state.lock().unwrap().len(), 0);
     }
@@ -369,19 +388,19 @@ mod tests {
         ];
 
         for message in messages1 {
-            let _ = handle_message(&state, message, &socket);
+            let _ = handle_message(&state, message, &socket, &OTHER_ADDR);
         }
 
         assert_eq!(state.lock().unwrap().len(), 2);
 
         for message in messages2 {
-            let _ = handle_message(&state, message, &socket);
+            let _ = handle_message(&state, message, &socket, &OTHER_ADDR);
         }
 
         assert_eq!(state.lock().unwrap().len(), 1);
 
         for message in messages3 {
-            let _ = handle_message(&state, message, &socket);
+            let _ = handle_message(&state, message, &socket, &OTHER_ADDR);
         }
 
         assert_eq!(state.lock().unwrap().len(), 0);
@@ -394,6 +413,6 @@ mod tests {
         let state: State = Arc::new(Mutex::new(BTreeMap::new()));
         let messages = create_messages(42, &mut [path("path")]);
 
-        handle_message(&state, messages[0].clone(), &socket).unwrap();
+        handle_message(&state, messages[0].clone(), &socket, &OTHER_ADDR).unwrap();
     }
 }
