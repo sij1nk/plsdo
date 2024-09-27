@@ -91,15 +91,15 @@ enum DownloadInfo {
 fn handle_query_message(
     state: &State,
     socket: &UnixDatagram,
-    other_socket_addr: &SocketAddr,
+    dp_addr: &SocketAddr,
 ) -> anyhow::Result<()> {
+    let dp_socket_path = dp_addr.as_pathname().ok_or(anyhow::anyhow!(
+        "Download process socket is unbound; can't reply to query message"
+    ))?;
     let state = state.lock().expect("lock to work");
     let state_string = serde_json::to_string_pretty(&*state)?;
     println!("State string: {state_string}");
-    socket.send_to(
-        state_string.as_bytes(),
-        other_socket_addr.as_pathname().unwrap(),
-    )?;
+    socket.send_to(state_string.as_bytes(), dp_socket_path)?;
     Ok(())
 }
 
@@ -107,11 +107,11 @@ fn handle_message(
     state: &State,
     message: Message,
     socket: &UnixDatagram,
-    other_socket_addr: &SocketAddr,
+    dp_addr: &SocketAddr,
 ) -> anyhow::Result<()> {
     println!("Message: {:?}", message);
     match message {
-        Message::QueryMessage => handle_query_message(state, socket, other_socket_addr),
+        Message::QueryMessage => handle_query_message(state, socket, dp_addr),
         Message::DownloadProcessMessage(message) => handle_download_process_message(state, message),
     }
 }
@@ -234,12 +234,12 @@ pub fn run() -> anyhow::Result<()> {
 
     loop {
         match socket.recv_from(buf.as_mut_slice()) {
-            Ok((n, other_socket)) => {
+            Ok((n, dp_addr)) => {
                 println!("Aggregator: Received {n} bytes");
 
                 match serde_json::from_slice::<Message>(&buf[0..n]) {
                     Ok(message) => {
-                        let _ = handle_message(&state, message, &socket, &other_socket);
+                        let _ = handle_message(&state, message, &socket, &dp_addr);
                     }
                     Err(e) => eprintln!("{e:?}"),
                 };

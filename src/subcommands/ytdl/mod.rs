@@ -141,7 +141,6 @@ fn send_query_message(socket: &UnixDatagram, message: &Message) -> anyhow::Resul
     send_message(socket, message)?;
     // TODO: find optimal buffer size
     let mut buf = vec![0; 1024];
-    // FIXME: hangs
     let _ = socket.recv(buf.as_mut_slice());
     println!("Query: received answer");
     let response = String::from_utf8(buf)?;
