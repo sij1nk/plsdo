@@ -1,16 +1,12 @@
+use std::fs::OpenOptions;
 use std::io::prelude::Write;
-use std::io::LineWriter;
-use std::{collections::BTreeSet, fs::OpenOptions};
 
 use anyhow::Context;
 use clap::ArgMatches;
 use fd_lock::{RwLock, RwLockWriteGuard};
-use hyprland::data::Clients;
-use hyprland::shared::{HyprData, WorkspaceType};
+use hyprland::shared::WorkspaceType;
 
-use crate::system_atlas::SYSTEM_ATLAS;
-
-use super::{get_active_workspace_ids, WorkspaceId};
+use super::{update_system_bar_layout, write_workspace_state_to_backing_file};
 
 const PIDFILE: &str = "/tmp/plsdo-hypr-workspace-listener.pid";
 
@@ -28,67 +24,19 @@ fn write_pid(guard: &mut RwLockWriteGuard<'_, std::fs::File>) -> anyhow::Result<
     Ok(write!(guard, "{pid_string}")?)
 }
 
-#[derive(Debug)]
-struct OccupiedWorkspaceIds {
-    inner: BTreeSet<WorkspaceId>,
-}
-
-impl FromIterator<WorkspaceId> for OccupiedWorkspaceIds {
-    fn from_iter<T: IntoIterator<Item = WorkspaceId>>(iter: T) -> Self {
-        Self {
-            inner: BTreeSet::from_iter(iter),
-        }
+fn handle_workspace_changed_event(_data: WorkspaceType) {
+    if let Err(e) = write_workspace_state_to_backing_file() {
+        eprintln!("Failed to write to backing file: {}", e);
     }
 }
 
-impl std::fmt::Display for OccupiedWorkspaceIds {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let len = self.inner.len();
-        if len == 0 {
-            return Ok(());
-        }
-
-        let mut iter = self.inner.iter();
-        for _ in 0..len - 1 {
-            write!(
-                f,
-                "{},",
-                iter.next()
-                    .expect("The item should exist, because we're within bounds")
-            )?;
-        }
-        write!(f, "{}", iter.next().expect("The last item should exist"))?;
-
-        Ok(())
+fn handle_monitor_added_or_removed_event(_monitor_name: String) {
+    if let Err(e) = update_system_bar_layout() {
+        eprintln!("Failed to handle monitor added event: {}", e);
+    };
+    if let Err(e) = write_workspace_state_to_backing_file() {
+        eprintln!("Failed to write to backing file: {}", e);
     }
-}
-
-/// Append the state of the workspaces to a file, from which the eww workspaces widget can read it
-/// from. The output should be the following JSON array:
-/// `[<active_secondary_workspace>,<active_primary_workspace>,[<occupied_workspace>...]]`
-/// Odd numbered workspaces belong to the primary monitor; even numbered workspaces belong to the
-/// secondary one.
-fn write_workspace_state_to_backing_file(_data: WorkspaceType) -> anyhow::Result<()> {
-    let (primary_active_id, secondary_active_id) = get_active_workspace_ids()?;
-
-    let occupied_workspace_ids = Clients::get()?
-        .into_iter()
-        .map(|cl| cl.workspace.id)
-        .filter(|&id| id > 0)
-        .collect::<OccupiedWorkspaceIds>();
-
-    let file = OpenOptions::new()
-        .create(false)
-        .append(true)
-        .open(SYSTEM_ATLAS.eww_workspaces)?;
-    let mut writer = LineWriter::new(&file);
-    writeln!(
-        writer,
-        "[{},{},[{}]]",
-        secondary_active_id, primary_active_id, occupied_workspace_ids
-    )?;
-
-    Ok(())
 }
 
 pub fn run(_args: &ArgMatches) -> anyhow::Result<()> {
@@ -99,11 +47,11 @@ pub fn run(_args: &ArgMatches) -> anyhow::Result<()> {
     write_pid(&mut guard)?;
 
     let mut listener = hyprland::event_listener::EventListener::new();
-    listener.add_workspace_change_handler(|data| {
-        if let Err(e) = write_workspace_state_to_backing_file(data) {
-            eprintln!("Failed to write to backing file: {}", e);
-        }
-    });
+
+    listener.add_workspace_change_handler(handle_workspace_changed_event);
+    listener.add_monitor_added_handler(handle_monitor_added_or_removed_event);
+    listener.add_monitor_removed_handler(handle_monitor_added_or_removed_event);
+
     listener.start_listener()?;
 
     Ok(())
