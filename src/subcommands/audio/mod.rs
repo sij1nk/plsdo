@@ -1,6 +1,6 @@
 use std::{fs::OpenOptions, io::LineWriter, io::Write};
 
-use clap::{arg, value_parser, ArgMatches, Command, ValueEnum};
+use clap::{arg, value_parser, ArgAction, ArgMatches, Command, ValueEnum};
 use serde::Serialize;
 use xshell::{cmd, Shell};
 
@@ -11,12 +11,6 @@ struct AudioState {
     value: u32,
     is_muted: bool,
     output: AudioOutput,
-}
-
-#[derive(ValueEnum, Clone, Debug)]
-enum Direction {
-    Up,
-    Down,
 }
 
 #[derive(ValueEnum, Serialize, Clone, Debug)]
@@ -32,13 +26,15 @@ pub fn command_extension(cmd: Command) -> Command {
         Command::new("set")
             .about("Set the audio volume")
             .arg(
-                arg!(-d --direction <DIRECTION>)
-                    .value_parser(value_parser!(Direction))
-                    .required(true),
+                arg!(-r --relative <IS_RELATIVE> "Treat value as relative")
+                    .value_parser(value_parser!(bool))
+                    .action(ArgAction::SetTrue)
+                    .required(false),
             )
             .arg(
-                arg!([DELTA])
-                    .value_parser(value_parser!(i16).range(1..))
+                arg!([VALUE])
+                    .value_parser(value_parser!(i16))
+                    .allow_negative_numbers(true)
                     .required(true),
             ),
         Command::new("toggle-mute").about("Toggle audio mute"),
@@ -79,26 +75,14 @@ fn toggle_mute(sh: &Shell) -> anyhow::Result<()> {
     Ok(cmd!(sh, "pactl set-sink-mute {SINK} toggle").run()?)
 }
 
-fn set_volume(sh: &Shell, delta: i16) -> anyhow::Result<()> {
-    let delta_str = format!("{:+}", delta);
-    cmd!(sh, "pactl set-sink-volume {SINK} {delta_str}%").run()?;
-    Ok(())
-}
-
-fn determine_delta(args: &ArgMatches) -> anyhow::Result<i16> {
-    let direction = args
-        .get_one::<Direction>("direction")
-        .expect("Direction argument is required");
-    let delta = *args
-        .get_one::<i16>("DELTA")
-        .expect("DELTA argument is required");
-
-    let signed_delta: i16 = match direction {
-        Direction::Up => delta,
-        Direction::Down => -delta,
+fn set_volume(sh: &Shell, value: i16, is_relative: bool) -> anyhow::Result<()> {
+    let value_str = if is_relative {
+        format!("{:+}", value)
+    } else {
+        format!("{}", value)
     };
-
-    Ok(signed_delta)
+    cmd!(sh, "pactl set-sink-volume {SINK} {value_str}%").run()?;
+    Ok(())
 }
 
 fn get_current_audio_state(sh: &Shell) -> anyhow::Result<AudioState> {
@@ -129,6 +113,7 @@ fn get_current_audio_state(sh: &Shell) -> anyhow::Result<AudioState> {
 }
 
 fn initialize(sh: &Shell) -> anyhow::Result<()> {
+    set_volume(sh, 25, false)?;
     let audio_state = get_current_audio_state(sh)?;
     write_to_backing_file(audio_state)?;
 
@@ -142,8 +127,19 @@ pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<Option<String>> {
         Some(("volume", volume_args)) => {
             let audio_state = match volume_args.subcommand() {
                 Some(("set", set_args)) => {
-                    let delta = determine_delta(set_args)?;
-                    set_volume(sh, delta)?;
+                    let is_relative = set_args
+                        .get_one::<bool>("relative")
+                        .copied()
+                        .unwrap_or(false);
+                    let value = *set_args
+                        .get_one::<i16>("VALUE")
+                        .expect("VALUE argument is required");
+
+                    if !is_relative && value < 0 {
+                        anyhow::bail!("Cannot use negative value in non-relative mode!");
+                    }
+
+                    set_volume(sh, value, is_relative)?;
                     Some(get_current_audio_state(sh)?)
                 }
                 Some(("toggle-mute", _)) => {
