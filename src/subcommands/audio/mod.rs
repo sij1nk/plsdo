@@ -17,10 +17,16 @@ enum Direction {
     Down,
 }
 
+#[derive(ValueEnum, Clone, Debug)]
+enum Output {
+    Headphones,
+    Speakers,
+}
+
 const SINK: &str = "@DEFAULT_SINK@";
 
 pub fn command_extension(cmd: Command) -> Command {
-    let inner_subcommands = [
+    let volume_subcommands = [
         Command::new("set")
             .about("Set the audio volume")
             .arg(
@@ -36,12 +42,24 @@ pub fn command_extension(cmd: Command) -> Command {
         Command::new("toggle-mute").about("Toggle audio mute"),
     ];
 
+    let inner_subcommands = [
+        Command::new("output")
+            .about("Change the audio output")
+            .arg_required_else_help(true)
+            .arg(arg!([OUTPUT] "The output device")),
+        Command::new("volume")
+            .about("Change the audio volume")
+            .arg_required_else_help(true)
+            .subcommand_required(true)
+            .subcommands(volume_subcommands),
+    ];
+
     cmd.subcommand_required(true)
         .arg_required_else_help(true)
         .subcommands(inner_subcommands.iter())
 }
 
-fn write_volume_to_backing_file(volume: Volume) -> anyhow::Result<()> {
+fn write_to_backing_file(volume: Volume) -> anyhow::Result<()> {
     let file = OpenOptions::new()
         .create(false)
         .append(true)
@@ -108,22 +126,28 @@ fn get_current_volume(sh: &Shell) -> anyhow::Result<Volume> {
 }
 
 pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<Option<String>> {
-    let volume = match args.subcommand() {
-        Some(("set", set_args)) => {
-            let delta = determine_delta(set_args)?;
-            set_volume(sh, delta)?;
-            Some(get_current_volume(sh)?)
-        }
-        Some(("toggle-mute", _)) => {
-            toggle_mute(sh)?;
-            Some(get_current_volume(sh)?)
-        }
-        _ => None,
-    };
+    match args.subcommand() {
+        Some(("output", _output_args)) => {}
+        Some(("volume", volume_args)) => {
+            let volume = match volume_args.subcommand() {
+                Some(("set", set_args)) => {
+                    let delta = determine_delta(set_args)?;
+                    set_volume(sh, delta)?;
+                    Some(get_current_volume(sh)?)
+                }
+                Some(("toggle-mute", _)) => {
+                    toggle_mute(sh)?;
+                    Some(get_current_volume(sh)?)
+                }
+                _ => None,
+            };
 
-    if let Some(volume) = volume {
-        write_volume_to_backing_file(volume)?;
-    }
+            if let Some(volume) = volume {
+                write_to_backing_file(volume)?;
+            }
+        }
+        _ => {}
+    };
 
     Ok(None)
 }
