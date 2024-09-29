@@ -37,6 +37,7 @@ pub fn command_extension(cmd: Command) -> Command {
     ];
 
     cmd.subcommand_required(true)
+        .arg_required_else_help(true)
         .subcommands(inner_subcommands.iter())
 }
 

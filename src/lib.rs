@@ -26,7 +26,7 @@ define_subcommands!([
     (workspace, "Manage desktop workspaces"),
     (brightness, "Adjust the screen brightness"),
     (colortemp, "Adjust the screen color temperature"),
-    (volume, "Adjust the audio volume"),
+    (audio, "Adjust the audio volume or output"),
     (ytdl, "Download videos using yt-dlp")
 ]);
 
