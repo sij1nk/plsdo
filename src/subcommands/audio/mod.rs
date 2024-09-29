@@ -1,14 +1,16 @@
 use std::{fs::OpenOptions, io::LineWriter, io::Write};
 
 use clap::{arg, value_parser, ArgMatches, Command, ValueEnum};
+use serde::Serialize;
 use xshell::{cmd, Shell};
 
 use crate::system_atlas::SYSTEM_ATLAS;
 
-#[derive(Debug, Clone)]
-struct Volume {
+#[derive(Serialize, Debug, Clone)]
+struct AudioState {
     value: u32,
     is_muted: bool,
+    output: AudioOutput,
 }
 
 #[derive(ValueEnum, Clone, Debug)]
@@ -17,8 +19,8 @@ enum Direction {
     Down,
 }
 
-#[derive(ValueEnum, Clone, Debug)]
-enum Output {
+#[derive(ValueEnum, Serialize, Clone, Debug)]
+enum AudioOutput {
     Headphones,
     Speakers,
 }
@@ -43,6 +45,7 @@ pub fn command_extension(cmd: Command) -> Command {
     ];
 
     let inner_subcommands = [
+        Command::new("init").about("Initialize audio and audio-related information"),
         Command::new("output")
             .about("Change the audio output")
             .arg_required_else_help(true)
@@ -59,16 +62,15 @@ pub fn command_extension(cmd: Command) -> Command {
         .subcommands(inner_subcommands.iter())
 }
 
-fn write_to_backing_file(volume: Volume) -> anyhow::Result<()> {
+fn write_to_backing_file(audio_state: AudioState) -> anyhow::Result<()> {
     let file = OpenOptions::new()
-        .create(false)
+        .create(true)
         .append(true)
-        .open(SYSTEM_ATLAS.eww_volume)?;
+        .open(SYSTEM_ATLAS.eww_audio)?;
     let mut writer = LineWriter::new(&file);
 
-    let is_muted_str = if volume.is_muted { "muted" } else { "unmuted" };
-
-    writeln!(writer, "[{},\"{}\"]", volume.value, is_muted_str)?;
+    serde_json::to_writer(&mut writer, &audio_state)?;
+    writer.write_all(b"\n")?;
 
     Ok(())
 }
@@ -99,7 +101,7 @@ fn determine_delta(args: &ArgMatches) -> anyhow::Result<i16> {
     Ok(signed_delta)
 }
 
-fn get_current_volume(sh: &Shell) -> anyhow::Result<Volume> {
+fn get_current_audio_state(sh: &Shell) -> anyhow::Result<AudioState> {
     let is_muted = cmd!(sh, "pactl get-sink-mute {SINK}")
         .read()?
         .split_once(' ')
@@ -119,35 +121,45 @@ fn get_current_volume(sh: &Shell) -> anyhow::Result<Volume> {
         .trim();
     let volume = volume_percent[..volume_percent.len() - 1].parse::<u32>()?;
 
-    Ok(Volume {
+    Ok(AudioState {
         value: volume,
         is_muted,
+        output: AudioOutput::Headphones,
     })
+}
+
+fn initialize(sh: &Shell) -> anyhow::Result<()> {
+    let audio_state = get_current_audio_state(sh)?;
+    write_to_backing_file(audio_state)?;
+
+    Ok(())
 }
 
 pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<Option<String>> {
     match args.subcommand() {
-        Some(("output", _output_args)) => {}
+        Some(("init", _)) => initialize(sh),
+        Some(("output", _output_args)) => Ok(()),
         Some(("volume", volume_args)) => {
-            let volume = match volume_args.subcommand() {
+            let audio_state = match volume_args.subcommand() {
                 Some(("set", set_args)) => {
                     let delta = determine_delta(set_args)?;
                     set_volume(sh, delta)?;
-                    Some(get_current_volume(sh)?)
+                    Some(get_current_audio_state(sh)?)
                 }
                 Some(("toggle-mute", _)) => {
                     toggle_mute(sh)?;
-                    Some(get_current_volume(sh)?)
+                    Some(get_current_audio_state(sh)?)
                 }
                 _ => None,
             };
 
-            if let Some(volume) = volume {
-                write_to_backing_file(volume)?;
+            if let Some(audio_state) = audio_state {
+                write_to_backing_file(audio_state)?;
             }
+            Ok(())
         }
-        _ => {}
-    };
+        _ => Ok(()),
+    }?;
 
     Ok(None)
 }
