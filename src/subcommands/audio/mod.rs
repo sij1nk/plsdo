@@ -8,7 +8,7 @@ use crate::system_atlas::SYSTEM_ATLAS;
 
 #[derive(Serialize, Debug, Clone)]
 struct AudioState {
-    value: u32,
+    volume: u32,
     is_muted: bool,
     output: AudioOutput,
 }
@@ -106,7 +106,7 @@ fn get_current_audio_state(sh: &Shell) -> anyhow::Result<AudioState> {
     let volume = volume_percent[..volume_percent.len() - 1].parse::<u32>()?;
 
     Ok(AudioState {
-        value: volume,
+        volume,
         is_muted,
         output: AudioOutput::Headphones,
     })
