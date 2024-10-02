@@ -162,7 +162,7 @@ impl TryFrom<HyprMonitorName<'_>> for Monitor {
         match value {
             "HDMI-A-1" => Ok(Self::Primary),
             "DP-1" => Ok(Self::Secondary),
-            _ => Err(anyhow::anyhow!("Found unexpected monitor name {}", value)),
+            _ => Err(anyhow::anyhow!("Found unexpected monitor name '{}'", value)),
         }
     }
 }
@@ -342,10 +342,15 @@ fn get_active_monitor(sh: &Shell) -> anyhow::Result<Monitor> {
     let monitor_name = output
         .lines()
         .next()
-        .ok_or(anyhow::anyhow!(err))?
+        .ok_or(anyhow::anyhow!(err))
+        .context("Output is empty")?
         .split_once("on monitor ")
-        .ok_or(anyhow::anyhow!(err))?
-        .1;
+        .ok_or(anyhow::anyhow!(err))
+        .context("First line is malformed")?
+        .1
+        .strip_suffix(':')
+        .ok_or(anyhow::anyhow!(err))
+        .context("First line is malformed")?;
     Monitor::try_from(monitor_name)
 }
 
