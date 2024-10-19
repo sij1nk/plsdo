@@ -12,6 +12,7 @@ use hyprland::{
     dispatch::{Dispatch, DispatchType},
     shared::{HyprData, WorkspaceId},
 };
+use listener::write_submap_to_backing_file;
 use serde::Serialize;
 use xshell::{cmd, Shell};
 
@@ -498,6 +499,7 @@ pub fn get_active_workspaces() -> anyhow::Result<HashMap<String, WorkspaceId>> {
 
 fn initialize() -> anyhow::Result<()> {
     write_workspace_state_to_backing_file()?;
+    write_submap_to_backing_file("".into())?;
     update_system_bar_layout()?;
     Ok(())
 }

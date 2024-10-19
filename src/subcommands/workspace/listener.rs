@@ -41,7 +41,7 @@ fn handle_monitor_added_or_removed_event(_monitor_name: String) {
     }
 }
 
-fn write_submap_to_backing_file(submap_name: String) -> anyhow::Result<()> {
+pub fn write_submap_to_backing_file(submap_name: String) -> anyhow::Result<()> {
     let file = OpenOptions::new()
         .create(true)
         .append(true)
