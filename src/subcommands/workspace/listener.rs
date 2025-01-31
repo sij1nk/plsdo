@@ -4,7 +4,7 @@ use std::{fs::OpenOptions, io::LineWriter};
 use anyhow::Context;
 use clap::ArgMatches;
 use fd_lock::{RwLock, RwLockWriteGuard};
-use hyprland::shared::WorkspaceType;
+use hyprland::event_listener::{MonitorAddedEventData, WorkspaceEventData};
 
 use crate::system_atlas::SYSTEM_ATLAS;
 
@@ -26,13 +26,22 @@ fn write_pid(guard: &mut RwLockWriteGuard<'_, std::fs::File>) -> anyhow::Result<
     Ok(write!(guard, "{pid_string}")?)
 }
 
-fn handle_workspace_changed_event(_data: WorkspaceType) {
+fn handle_workspace_changed_event(_data: WorkspaceEventData) {
     if let Err(e) = write_workspace_state_to_backing_file() {
         eprintln!("Failed to write to backing file: {}", e);
     }
 }
 
-fn handle_monitor_added_or_removed_event(_monitor_name: String) {
+fn handle_monitor_added_event(_data: MonitorAddedEventData) {
+    if let Err(e) = update_system_bar_layout() {
+        eprintln!("Failed to handle monitor added event: {}", e);
+    };
+    if let Err(e) = write_workspace_state_to_backing_file() {
+        eprintln!("Failed to write to backing file: {}", e);
+    }
+}
+
+fn handle_monitor_removed_event(_monitor_name: String) {
     if let Err(e) = update_system_bar_layout() {
         eprintln!("Failed to handle monitor added event: {}", e);
     };
@@ -68,10 +77,10 @@ pub fn run(_args: &ArgMatches) -> anyhow::Result<()> {
 
     let mut listener = hyprland::event_listener::EventListener::new();
 
-    listener.add_workspace_change_handler(handle_workspace_changed_event);
-    listener.add_monitor_added_handler(handle_monitor_added_or_removed_event);
-    listener.add_monitor_removed_handler(handle_monitor_added_or_removed_event);
-    listener.add_sub_map_change_handler(handle_submap_change_event);
+    listener.add_workspace_changed_handler(handle_workspace_changed_event);
+    listener.add_monitor_added_handler(handle_monitor_added_event);
+    listener.add_monitor_removed_handler(handle_monitor_removed_event);
+    listener.add_sub_map_changed_handler(handle_submap_change_event);
 
     listener.start_listener()?;
 
