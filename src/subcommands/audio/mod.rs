@@ -17,6 +17,7 @@ struct AudioState {
 enum AudioOutputFriendlyName {
     Headphones,
     Speakers,
+    Earbuds,
     Unrecognized,
 }
 
@@ -52,7 +53,7 @@ impl From<PactlAudioSink> for AudioOutput {
         // I should look into that
         let output_type = if sink
             .description
-            .starts_with("Family 17h/19h HD Audio Controller")
+            .starts_with("Family 17h/19h/1ah HD Audio Controller")
         {
             AudioOutputFriendlyName::Speakers
         } else if sink
@@ -60,6 +61,8 @@ impl From<PactlAudioSink> for AudioOutput {
             .starts_with("Navi 21/23 HDMI/DP Audio Controller")
         {
             AudioOutputFriendlyName::Headphones
+        } else if sink.description.starts_with("JBL WAVE200TWS") {
+            AudioOutputFriendlyName::Earbuds
         } else {
             AudioOutputFriendlyName::Unrecognized
         };
