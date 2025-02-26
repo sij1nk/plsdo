@@ -6,6 +6,7 @@ use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::Path;
 
 pub mod dmenu;
+pub mod listener;
 use wl_clipboard_rs::paste::{get_contents, ClipboardType, Error, MimeType, Seat};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]

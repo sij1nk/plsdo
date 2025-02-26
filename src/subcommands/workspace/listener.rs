@@ -1,30 +1,20 @@
-use std::io::prelude::Write;
-use std::{fs::OpenOptions, io::LineWriter};
+use std::{
+    fs::OpenOptions,
+    io::{LineWriter, Write},
+};
 
 use anyhow::Context;
 use clap::ArgMatches;
-use fd_lock::{RwLock, RwLockWriteGuard};
 use hyprland::event_listener::{MonitorAddedEventData, WorkspaceEventData};
 
-use crate::system_atlas::SYSTEM_ATLAS;
+use crate::{
+    system_atlas::SYSTEM_ATLAS,
+    util::listener::{get_pidfile_lock, write_pid},
+};
 
 use super::{update_system_bar_layout, write_workspace_state_to_backing_file};
 
 const PIDFILE: &str = "/tmp/plsdo-hypr-workspace-listener.pid";
-
-fn get_pidfile_lock() -> anyhow::Result<RwLock<std::fs::File>> {
-    let pidfile = OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(false)
-        .open(PIDFILE)?;
-    Ok(RwLock::new(pidfile))
-}
-
-fn write_pid(guard: &mut RwLockWriteGuard<'_, std::fs::File>) -> anyhow::Result<()> {
-    let pid_string = format!("{}", std::process::id());
-    Ok(write!(guard, "{pid_string}")?)
-}
 
 fn handle_workspace_changed_event(_data: WorkspaceEventData) {
     if let Err(e) = write_workspace_state_to_backing_file() {
@@ -69,7 +59,7 @@ fn handle_submap_change_event(submap_name: String) {
 }
 
 pub fn run(_args: &ArgMatches) -> anyhow::Result<()> {
-    let mut lock = get_pidfile_lock()?;
+    let mut lock = get_pidfile_lock(PIDFILE)?;
     let mut guard = lock
         .try_write()
         .context("The listener is already running")?;
