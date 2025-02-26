@@ -6,6 +6,8 @@ use xshell::{cmd, Shell};
 
 use crate::{system_atlas::SYSTEM_ATLAS, util::dmenu::get_platform_dmenu};
 
+mod listener;
+
 #[derive(Serialize, Debug, Clone)]
 struct AudioState {
     volume: u32,
@@ -120,6 +122,8 @@ pub fn command_extension(cmd: Command) -> Command {
             .arg_required_else_help(true)
             .subcommand_required(true)
             .subcommands(volume_subcommands),
+        Command::new("run_listener")
+            .about("Launch the listener process, that reacts to audio device added/removed events"),
     ];
 
     cmd.subcommand_required(true)
@@ -314,6 +318,7 @@ pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<Option<String>> {
         Some(("init", _)) => initialize(sh),
         Some(("output", output_args)) => handle_output_subcommand(sh, output_args),
         Some(("volume", volume_args)) => handle_volume_subcommand(sh, volume_args),
+        Some(("run_listener", run_listener_args)) => listener::run(run_listener_args),
         _ => Ok(()),
     }?;
 
