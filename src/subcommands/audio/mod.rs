@@ -1,83 +1,14 @@
-use std::{fs::OpenOptions, io::LineWriter, io::Write};
+use clap::{arg, value_parser, ArgAction, ArgMatches, Command};
+use state::{
+    find_matching_output, get_all_audio_outputs, get_current_audio_output, get_current_audio_state,
+    set_audio_output, set_volume, toggle_mute, write_to_backing_file,
+};
+use xshell::Shell;
 
-use clap::{arg, value_parser, ArgAction, ArgMatches, Command, ValueEnum};
-use serde::{Deserialize, Serialize};
-use xshell::{cmd, Shell};
-
-use crate::{system_atlas::SYSTEM_ATLAS, util::dmenu::get_platform_dmenu};
+use crate::util::dmenu::get_platform_dmenu;
 
 mod listener;
-
-#[derive(Serialize, Debug, Clone)]
-struct AudioState {
-    volume: u32,
-    is_muted: bool,
-    output: AudioOutputFriendlyName,
-}
-
-#[derive(ValueEnum, Serialize, Clone, Debug, PartialEq, Eq)]
-enum AudioOutputFriendlyName {
-    Headphones,
-    Speakers,
-    Earbuds,
-    Unrecognized,
-}
-
-#[derive(Deserialize, Clone, Debug)]
-struct PactlAudioSink {
-    name: String,
-    description: String,
-}
-
-#[derive(Serialize, Clone, Debug)]
-struct AudioOutput {
-    name: String,
-    description: String,
-    friendly_name: AudioOutputFriendlyName,
-}
-
-impl AudioOutput {
-    fn is_matching(&self, needle: &str) -> bool {
-        let is_type_matching = AudioOutputFriendlyName::from_str(needle, true)
-            .map(|t| t == self.friendly_name)
-            .unwrap_or(false);
-        if is_type_matching {
-            true
-        } else {
-            self.name.contains(needle) || self.description.contains(needle)
-        }
-    }
-}
-
-impl From<PactlAudioSink> for AudioOutput {
-    fn from(sink: PactlAudioSink) -> Self {
-        // TODO: this is not very elaborate... maybe there is a way to assign labels to sinks in pipewire?
-        // I should look into that
-        let output_type = if sink
-            .description
-            .starts_with("Family 17h/19h/1ah HD Audio Controller")
-        {
-            AudioOutputFriendlyName::Speakers
-        } else if sink
-            .description
-            .starts_with("Navi 21/23 HDMI/DP Audio Controller")
-        {
-            AudioOutputFriendlyName::Headphones
-        } else if sink.description.starts_with("JBL WAVE200TWS") {
-            AudioOutputFriendlyName::Earbuds
-        } else {
-            AudioOutputFriendlyName::Unrecognized
-        };
-
-        Self {
-            name: sink.name,
-            description: sink.description,
-            friendly_name: output_type,
-        }
-    }
-}
-
-const SINK: &str = "@DEFAULT_SINK@";
+mod state;
 
 pub fn command_extension(cmd: Command) -> Command {
     let volume_subcommands = [
@@ -129,118 +60,6 @@ pub fn command_extension(cmd: Command) -> Command {
     cmd.subcommand_required(true)
         .arg_required_else_help(true)
         .subcommands(inner_subcommands.iter())
-}
-
-fn write_to_backing_file(audio_state: AudioState) -> anyhow::Result<()> {
-    let file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(SYSTEM_ATLAS.eww_audio)?;
-    let mut writer = LineWriter::new(&file);
-
-    serde_json::to_writer(&mut writer, &audio_state)?;
-    writer.write_all(b"\n")?;
-
-    Ok(())
-}
-
-fn toggle_mute(sh: &Shell) -> anyhow::Result<()> {
-    Ok(cmd!(sh, "pactl set-sink-mute {SINK} toggle").run()?)
-}
-
-fn set_volume(sh: &Shell, value: i16, is_relative: bool) -> anyhow::Result<()> {
-    let value_str = if is_relative {
-        format!("{:+}", value)
-    } else {
-        format!("{}", value)
-    };
-    cmd!(sh, "pactl set-sink-volume {SINK} {value_str}%").run()?;
-    Ok(())
-}
-
-fn get_current_audio_state(sh: &Shell) -> anyhow::Result<AudioState> {
-    let is_muted = cmd!(sh, "pactl get-sink-mute {SINK}")
-        .read()?
-        .split_once(' ')
-        .ok_or(anyhow::anyhow!(
-            "Got unexpected output from `pactl get-sink-mute"
-        ))?
-        .1
-        == "yes";
-
-    let volume_str = cmd!(sh, "pactl get-sink-volume {SINK}").read()?;
-    let volume_percent = volume_str
-        .split('/')
-        .nth(1)
-        .ok_or(anyhow::anyhow!(
-            "Got unexpected output from `pactl get-sink-volume"
-        ))?
-        .trim();
-    let volume = volume_percent[..volume_percent.len() - 1].parse::<u32>()?;
-
-    let output = get_current_audio_output(sh)?;
-
-    Ok(AudioState {
-        volume,
-        is_muted,
-        output: output.friendly_name,
-    })
-}
-
-fn initialize(sh: &Shell) -> anyhow::Result<()> {
-    set_volume(sh, 25, false)?;
-    let audio_state = get_current_audio_state(sh)?;
-    write_to_backing_file(audio_state)
-}
-
-fn get_all_audio_outputs(sh: &Shell) -> anyhow::Result<Vec<AudioOutput>> {
-    let sinks_json = cmd!(sh, "pactl -f json list sinks").read()?;
-    let sinks: Vec<PactlAudioSink> = serde_json::from_str(&sinks_json)?;
-    let outputs = sinks.into_iter().map(AudioOutput::from).collect::<Vec<_>>();
-
-    Ok(outputs)
-}
-
-fn get_current_audio_output(sh: &Shell) -> anyhow::Result<AudioOutput> {
-    let outputs = get_all_audio_outputs(sh)?;
-    let current_output_name = cmd!(sh, "pactl get-default-sink").read()?;
-
-    outputs
-        .into_iter()
-        .find(|o| o.name == current_output_name)
-        .ok_or(anyhow::anyhow!(
-            "Could not find current audio output by name"
-        ))
-}
-
-fn set_audio_output(sh: &Shell, name: &str) -> anyhow::Result<()> {
-    cmd!(sh, "pactl set-default-sink {name}").run()?;
-    Ok(())
-}
-
-fn find_matching_output<'a>(
-    outputs: &'a [AudioOutput],
-    needle: &str,
-) -> anyhow::Result<&'a AudioOutput> {
-    let matching_outputs = outputs
-        .iter()
-        .filter(|o| o.is_matching(needle))
-        .collect::<Vec<_>>();
-
-    let len = matching_outputs.len();
-
-    if len == 0 {
-        anyhow::bail!("No output was found matching the needle '{}'", needle);
-    }
-
-    if len > 1 {
-        anyhow::bail!(
-            "Multiple outputs were found matching the needle '{}'",
-            needle
-        );
-    }
-
-    Ok(matching_outputs[0])
 }
 
 fn handle_output_subcommand(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()> {
@@ -311,6 +130,12 @@ fn handle_volume_subcommand(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()>
         Some(("toggle-mute", _)) => toggle_mute(sh),
         _ => Ok(()),
     }
+}
+
+fn initialize(sh: &Shell) -> anyhow::Result<()> {
+    set_volume(sh, 25, false)?;
+    let audio_state = get_current_audio_state(sh)?;
+    write_to_backing_file(audio_state)
 }
 
 pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<Option<String>> {

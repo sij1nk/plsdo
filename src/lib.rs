@@ -2,6 +2,7 @@ use clap::{command, ArgMatches, Command};
 use define_subcommands_macro::define_subcommands;
 use xshell::Shell;
 
+mod constants;
 mod subcommands;
 mod system_atlas;
 mod util;
