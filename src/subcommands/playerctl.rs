@@ -32,12 +32,7 @@ fn get_playerctl_subcommand(cmd: &PlayerCommand) -> anyhow::Result<&'static str>
         PlayerCommand::Skip { delta: _ } => "position",
         PlayerCommand::Next => "next",
         PlayerCommand::Prev => "previous",
-        _ => {
-            return Err(anyhow::anyhow!(
-                "{:?} is not supposed to show up here!",
-                cmd
-            ))
-        }
+        _ => anyhow::bail!("{:?} is not supposed to show up here!", cmd),
     };
 
     Ok(subcommand)
@@ -75,10 +70,7 @@ fn write_selected_player_to_file(selected: &str) -> anyhow::Result<()> {
 
     if let Err(err) = selected_player_file.write_all(selected.as_bytes()) {
         std::fs::remove_file(path)?;
-        return Err(anyhow::anyhow!(
-            "Could not select player! Reason: {}",
-            err.to_string()
-        ));
+        anyhow::bail!("Could not select player! Reason: {}", err.to_string())
     }
 
     Ok(())

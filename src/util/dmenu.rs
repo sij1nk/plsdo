@@ -80,7 +80,7 @@ impl Dmenu for X11Dmenu {
         let chosen = chosen.context("Aborted")?;
 
         if forbid_invalid && !choices_joined.contains(&chosen) {
-            return Err(anyhow::anyhow!("Invalid input given"));
+            anyhow::bail!("Invalid input given")
         }
 
         Ok(chosen)

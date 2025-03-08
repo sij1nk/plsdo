@@ -50,9 +50,9 @@ fn get_layout_names_hyprland() -> anyhow::Result<Vec<String>> {
             .collect::<Vec<_>>());
     }
 
-    Err(anyhow::anyhow!(
+    anyhow::bail!(
         "Did not find definitions for keyboard layouts in the Hyprland configuration file!"
-    ))
+    )
 }
 
 /// Get the current layout identifier number by reading the backing file of the eww keyboard-layout

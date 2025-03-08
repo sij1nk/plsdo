@@ -80,7 +80,7 @@ pub fn parse(input: &str) -> anyhow::Result<YtdlLine> {
             .map(|rem| rem.1)
             .map_err(|e| e.to_owned().into())
     } else {
-        Err(anyhow::anyhow!("Unexpected parser prefix: '{}'", prefix))
+        anyhow::bail!("Unexpected parser prefix: '{}'", prefix)
     }
 }
 

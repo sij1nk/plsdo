@@ -125,10 +125,7 @@ fn handle_download_process_message(
     let mut handle_exit = |pid: ProcessId, ecode: i32| {
         let _dlinfo = state.remove(&pid);
         if ecode != 0 {
-            return Err(anyhow::anyhow!(
-                "Download Process exited with exit code {}",
-                ecode
-            ));
+            anyhow::bail!("Download Process exited with exit code {}", ecode);
         }
         Ok(())
     };
@@ -144,9 +141,7 @@ fn handle_download_process_message(
                     "Received VideoDownloadPath for a download which was not tracked"
                 ))?;
                 let DownloadInfo::UrlOnly(url) = dlinfo else {
-                    return Err(anyhow::anyhow!(
-                        "Received VideoDownloadPath while DownloadInfo wasn't UrlOnly"
-                    ));
+                    anyhow::bail!("Received VideoDownloadPath while DownloadInfo wasn't UrlOnly")
                 };
                 let metadata = url.create_metadata(path_string)?;
                 state.insert(message.pid, DownloadInfo::MetadataOnly(metadata));
@@ -157,9 +152,7 @@ fn handle_download_process_message(
                 ))?;
                 let full_dlinfo = match dlinfo {
                     DownloadInfo::UrlOnly(_) => {
-                        return Err(anyhow::anyhow!(
-                            "Received VideoDownloadProgress before VideoDownloadPath"
-                        ))
+                        anyhow::bail!("Received VideoDownloadProgress before VideoDownloadPath")
                     }
                     DownloadInfo::MetadataOnly(metadata) => {
                         metadata.create_full_download_info(progress)
@@ -177,9 +170,7 @@ fn handle_download_process_message(
                     "Received VideoDownloadDone for a download which was not tracked"
                 ))?;
                 let DownloadInfo::Full(mut full_dlinfo) = dlinfo else {
-                    return Err(anyhow::anyhow!(
-                        "Received VideoDownloadDone before VideoDownloadProgress"
-                    ));
+                    anyhow::bail!("Received VideoDownloadDone before VideoDownloadProgress");
                 };
                 full_dlinfo.set_as_completed();
                 state.insert(message.pid, DownloadInfo::Full(full_dlinfo));
@@ -192,14 +183,12 @@ fn handle_download_process_message(
                     "Received VideoExtractAudio for a download which was not tracked"
                 ))?;
                 let DownloadInfo::Full(mut full_dlinfo) = dlinfo else {
-                    return Err(anyhow::anyhow!(
-                        "Received VideoExtractAudio before VideoDownloadProgress"
-                    ));
+                    anyhow::bail!("Received VideoExtractAudio before VideoDownloadProgress");
                 };
                 if !full_dlinfo.is_completed() {
-                    return Err(anyhow::anyhow!(
+                    anyhow::bail!(
                         "Received VideoExtractAudio for a download which is not completed"
-                    ));
+                    );
                 }
                 full_dlinfo.set_as_extracting();
                 state.insert(message.pid, DownloadInfo::Full(full_dlinfo));

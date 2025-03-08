@@ -163,7 +163,7 @@ impl TryFrom<HyprMonitorName<'_>> for Monitor {
         match value {
             "HDMI-A-1" => Ok(Self::Primary),
             "DP-1" => Ok(Self::Secondary),
-            _ => Err(anyhow::anyhow!("Found unexpected monitor name '{}'", value)),
+            _ => anyhow::bail!("Found unexpected monitor name '{}'", value),
         }
     }
 }
@@ -454,10 +454,7 @@ fn open_pinned(args: &ArgMatches) -> anyhow::Result<()> {
         .iter()
         .find(|program| program.name == program_name)
     else {
-        return Err(anyhow::anyhow!(
-            "The program '{}' is not a pinned program",
-            program_name
-        ));
+        anyhow::bail!("The program '{}' is not a pinned program", program_name);
     };
 
     if let Some(already_running_program) = Clients::get()
@@ -472,10 +469,10 @@ fn open_pinned(args: &ArgMatches) -> anyhow::Result<()> {
             .iter()
             .find(|appinfo| appinfo.name() == pinned_program.name)
         else {
-            return Err(anyhow::anyhow!(
+            anyhow::bail!(
                 "Could not find desktop entry for the pinned program '{}'",
                 pinned_program.name
-            ));
+            );
         };
 
         // focus_workspace_by_id(pinned_program.workspace_id)?;
