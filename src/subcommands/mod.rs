@@ -7,5 +7,6 @@ pub mod game;
 pub mod keyboard_layout;
 pub mod playerctl;
 pub mod power;
+pub mod torrent;
 pub mod workspace;
 pub mod ytdl;

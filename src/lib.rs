@@ -28,7 +28,8 @@ define_subcommands!([
     (brightness, "Adjust the screen brightness"),
     (colortemp, "Adjust the screen color temperature"),
     (audio, "Adjust the audio volume or output"),
-    (ytdl, "Download videos using yt-dlp")
+    (ytdl, "Download videos using yt-dlp"),
+    (torrent, "Manage torrents")
 ]);
 
 pub fn run_subcommand(shell: &Shell, matches: &ArgMatches) -> anyhow::Result<Option<String>> {
