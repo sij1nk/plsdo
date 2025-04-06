@@ -11,48 +11,43 @@ use hyprland::{
     shared::HyprData,
 };
 
-use xshell::Shell;
+mod xkb;
+
+use serde::Deserialize;
+use xkb::get_xkb_layouts;
+use xshell::{cmd, Shell};
 
 use crate::{
     system_atlas::SYSTEM_ATLAS,
     util::{determine_wm, dmenu::Dmenu, WM},
 };
 
-/// The hyprland library does not allow us to query the list of registered keyboard layouts, and
-/// we cannot do it through the hyprctl cli either - we have to parse the config file.
-/// For now, we care only about the layout, and not the variant or the options, because we only
-/// have one of each layout.
-/// This is a _very_ naive implementation! I could make this more elaborate, but it would make
-/// more sense to contribute to the hyprland library instead.
-fn get_layout_names_hyprland() -> anyhow::Result<Vec<String>> {
-    let hyprland_config = File::open(SYSTEM_ATLAS.hyprland)?;
-    let reader = BufReader::new(hyprland_config);
+#[derive(Deserialize, Debug, Clone)]
+struct HyprctlKbLayoutOption {
+    option: String,
+    #[serde(rename(deserialize = "str"))]
+    value: String,
+    set: bool,
+}
 
-    for line in reader.lines() {
-        let Ok(line) = line else {
-            continue;
-        };
+fn get_layout_names_hyprland(sh: &Shell) -> anyhow::Result<Vec<String>> {
+    let layout_option_str = cmd!(sh, "hyprctl getoption input:kb_layout -j").read()?;
+    let layout_option = serde_json::from_str::<HyprctlKbLayoutOption>(&layout_option_str)?;
 
-        let line_trimmed = line.trim();
-        if !line_trimmed.starts_with("kb_layout") {
-            continue;
-        }
-
-        let Some((_, layouts)) = line_trimmed.split_once('=') else {
-            // This is fine; maybe we found the word we're looking for in a comment
-            // (not very probable in this case though...
-            continue;
-        };
-
-        return Ok(layouts
-            .split(',')
-            .map(|l| l.trim().to_owned())
-            .collect::<Vec<_>>());
+    if !layout_option.set {
+        anyhow::bail!(
+            "'{}' is unset in the Hyprland configuration!",
+            layout_option.option
+        );
     }
 
-    anyhow::bail!(
-        "Did not find definitions for keyboard layouts in the Hyprland configuration file!"
-    )
+    let layouts = layout_option
+        .value
+        .split(',')
+        .map(|w| w.to_owned())
+        .collect();
+
+    Ok(layouts)
 }
 
 /// Get the current layout identifier number by reading the backing file of the eww keyboard-layout
@@ -137,8 +132,11 @@ fn write_layout_to_backing_file_hyprland(id: u8, name: &str) -> anyhow::Result<(
 }
 
 fn run_hyprland(sh: &Shell, args: &ArgMatches) -> anyhow::Result<Option<String>> {
+    let xx = get_xkb_layouts(sh)?;
+    println!("{:?}", xx);
+
     let keyboards = Devices::get()?.keyboards;
-    let layout_names = get_layout_names_hyprland()?;
+    let layout_names = get_layout_names_hyprland(sh)?;
 
     let changed_layout_id = match args.subcommand() {
         Some(("next", _)) => {
