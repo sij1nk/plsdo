@@ -19,7 +19,7 @@ pub type Script = fn(&Shell, &ArgMatches) -> anyhow::Result<Option<String>>;
 // and `command_extension` functions.
 define_subcommands!([
     (power, "Shut down, reboot or suspend the machine"),
-    (keyboard_layout, "Change the keyboard layout"),
+    (keyboard, "Change the keyboard layout"),
     (font_size, "Change the font size"),
     (font_family, "Change the font family"),
     (playerctl, "Control media players"),
