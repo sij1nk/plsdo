@@ -1,7 +1,4 @@
-use std::{
-    fs::{read_to_string, File},
-    io::{BufRead, BufReader, Read},
-};
+use std::fs::read_to_string;
 
 use anyhow::Context;
 use serde::{de::Visitor, Deserialize, Deserializer};

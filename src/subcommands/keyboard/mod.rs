@@ -7,20 +7,33 @@ use anyhow::anyhow;
 use clap::{arg, ArgMatches, Command};
 use hyprland::{
     ctl::switch_xkb_layout::SwitchXKBLayoutCmdTypes,
-    data::{Devices, Keyboard},
+    data::{Devices, Keyboard as HyprlandKeyboard},
     shared::HyprData,
 };
 
 mod xkb;
 
 use serde::Deserialize;
-use xkb::get_xkb_layouts;
+use xkb::{get_xkb_layouts, XkbLayout};
 use xshell::{cmd, Shell};
 
 use crate::{
     system_atlas::SYSTEM_ATLAS,
     util::{determine_wm, dmenu::Dmenu, WM},
 };
+
+// TODO: do these really need to be Strings?
+#[derive(Debug, Clone)]
+struct AlternativeLayout {
+    name: String,
+    dotfiles_path: String,
+}
+
+#[derive(Debug, Clone)]
+enum KeyboardLayout {
+    Xkb(XkbLayout),
+    Alternative(AlternativeLayout),
+}
 
 #[derive(Deserialize, Debug, Clone)]
 struct HyprctlKbLayoutOption {
@@ -73,7 +86,7 @@ fn get_current_layout_id_hyprland() -> anyhow::Result<u8> {
     Ok(id)
 }
 
-fn set_layout_by_id_hyprland(keyboards: &[Keyboard], id: u8) -> anyhow::Result<()> {
+fn set_layout_by_id_hyprland(keyboards: &[HyprlandKeyboard], id: u8) -> anyhow::Result<()> {
     for kb in keyboards {
         hyprland::ctl::switch_xkb_layout::call(&kb.name, SwitchXKBLayoutCmdTypes::Id(id))?;
     }
@@ -132,29 +145,29 @@ fn write_layout_to_backing_file_hyprland(id: u8, name: &str) -> anyhow::Result<(
 }
 
 fn run_hyprland(sh: &Shell, args: &ArgMatches) -> anyhow::Result<Option<String>> {
-    let xx = get_xkb_layouts(sh)?;
-    println!("{:?}", xx);
+    let xkb_layouts = get_xkb_layouts(sh)?;
+    let kyria_layout = AlternativeLayout {
+        name: "kyria".to_owned(),
+        dotfiles_path: SYSTEM_ATLAS.canary_dotfiles.to_owned(),
+    };
+
+    let mut all_layouts: Vec<KeyboardLayout> =
+        xkb_layouts.into_iter().map(KeyboardLayout::Xkb).collect();
+    all_layouts.push(KeyboardLayout::Alternative(kyria_layout));
 
     let keyboards = Devices::get()?.keyboards;
     let layout_names = get_layout_names_hyprland(sh)?;
 
     let changed_layout_id = match args.subcommand() {
         Some(("next", _)) => {
-            let id = get_current_layout_id_hyprland()?;
-            let next = if id + 1 >= layout_names.len() as u8 {
-                0
-            } else {
-                id + 1
-            };
-            set_layout_by_id_hyprland(&keyboards, next)?;
-            Some(next)
+            // TODO: not sure what to do here yet...
+            // it should not cycle between qwerty layouts and canary, because that switch is a bit
+            // more elaborate than changing the xkb layout...
+            // switching between qwerty only is ok, maybe I can keep that
+            unimplemented!()
         }
         Some(("prev", _)) => {
-            let id = get_current_layout_id_hyprland()?;
-            // This can overflow, but we're not gonna have more than 256 layouts...
-            let prev = id.checked_sub(1).unwrap_or(layout_names.len() as u8 - 1);
-            set_layout_by_id_hyprland(&keyboards, prev)?;
-            Some(prev)
+            unimplemented!()
         }
         Some(("choose", _)) => {
             let chosen_layout_name = Dmenu::new(sh).choose_one(

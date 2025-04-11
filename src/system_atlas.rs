@@ -11,6 +11,7 @@ pub struct SystemAtlas<'a> {
     pub hyprland: &'a str,
     pub ytdl_aggregator_socket: &'a str,
     pub hypr_submap: &'a str,
+    pub canary_dotfiles: &'a str,
 }
 
 pub const SYSTEM_ATLAS: SystemAtlas = SystemAtlas {
@@ -24,4 +25,5 @@ pub const SYSTEM_ATLAS: SystemAtlas = SystemAtlas {
     hyprland: "/home/rg/.config/hypr/hyprland.conf",
     ytdl_aggregator_socket: "/tmp/plsdo-ytdl-aggregator.sock",
     hypr_submap: "/tmp/hypr-submap",
+    canary_dotfiles: "/home/rg/.dotfiles__canary",
 };
