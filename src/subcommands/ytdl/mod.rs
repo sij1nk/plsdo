@@ -8,11 +8,7 @@ use xshell::Shell;
 
 use crate::{
     system_atlas::SYSTEM_ATLAS,
-    util::{
-        determine_wm,
-        dmenu::{get_platform_dmenu, Dmenu},
-        Clipboard, RealClipboard,
-    },
+    util::{determine_wm, dmenu::Dmenu, Clipboard, RealClipboard},
 };
 
 use self::{
@@ -91,12 +87,7 @@ fn get_download_url(
     }
 }
 
-// TODO: get dmenu as impl trait parameter
-fn get_download_format(
-    download_args: &ArgMatches,
-    sh: &Shell,
-    dmenu: Box<dyn Dmenu>,
-) -> anyhow::Result<DownloadFormat> {
+fn get_download_format(download_args: &ArgMatches, sh: &Shell) -> anyhow::Result<DownloadFormat> {
     download_args
         .get_one::<DownloadFormat>("format")
         .copied()
@@ -105,8 +96,8 @@ fn get_download_format(
         .or_else(|_| {
             let formats: Vec<_> = DownloadFormat::iter().map(|opt| opt.to_string()).collect();
             let formats_str = formats.iter().map(|e| e.as_ref()).collect::<Vec<_>>();
-            dmenu
-                .choose_one(sh, "Choose download format", &formats_str, true)
+            Dmenu::new(sh)
+                .choose_one_str("Choose download format", &formats_str, true)
                 .and_then(|value| {
                     DownloadFormat::from_str(&value, true).map_err(|e| anyhow::anyhow!(e))
                 })
@@ -188,9 +179,8 @@ fn download(
     clipboard: impl Clipboard,
     downloader: impl Downloader,
 ) -> anyhow::Result<()> {
-    let dmenu = get_platform_dmenu();
     let url = get_download_url(download_args, clipboard)?;
-    let format = get_download_format(download_args, sh, dmenu)?;
+    let format = get_download_format(download_args, sh)?;
 
     let (pid, stdout_lines, wait_handle) = downloader.download(url, &format)?;
 

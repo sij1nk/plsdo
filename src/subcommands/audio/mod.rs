@@ -5,7 +5,7 @@ use state::{
 };
 use xshell::Shell;
 
-use crate::util::dmenu::get_platform_dmenu;
+use crate::util::dmenu::Dmenu;
 
 mod listener;
 mod state;
@@ -93,9 +93,8 @@ fn handle_output_subcommand(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()>
                 .map(|o| format!("{:?} | {}", o.friendly_name, o.description))
                 .collect::<Vec<_>>();
             choices.sort();
-            let choices_str = choices.iter().map(|e| e.as_ref()).collect::<Vec<&str>>();
             let result =
-                get_platform_dmenu().choose_one(sh, "Choose audio output", &choices_str, true)?;
+                Dmenu::new(sh).choose_one("Choose audio output", &choices, String::as_ref, true)?;
 
             let result_friendly_name = result
                 .split_once("|")

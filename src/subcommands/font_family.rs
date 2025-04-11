@@ -1,6 +1,6 @@
 use crate::{
     system_atlas::SYSTEM_ATLAS,
-    util::{self, dmenu::get_platform_dmenu},
+    util::{self, dmenu::Dmenu},
 };
 use std::io::Write;
 
@@ -35,8 +35,8 @@ pub fn run(sh: &Shell, _: &ArgMatches) -> anyhow::Result<Option<String>> {
             }
 
             // unwrap: we don't want to continue if the string is empty
-            let chosen = get_platform_dmenu()
-                .choose_one(sh, "Choose font family", &font_families, true)
+            let chosen = Dmenu::new(sh)
+                .choose_one_str("Choose font family", &font_families, true)
                 .unwrap();
 
             util::modify_file(SYSTEM_ATLAS.alacritty, "font:\n", |lines, writer| {

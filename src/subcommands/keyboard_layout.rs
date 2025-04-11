@@ -15,7 +15,7 @@ use xshell::Shell;
 
 use crate::{
     system_atlas::SYSTEM_ATLAS,
-    util::{determine_wm, dmenu::get_platform_dmenu, WM},
+    util::{determine_wm, dmenu::Dmenu, WM},
 };
 
 /// The hyprland library does not allow us to query the list of registered keyboard layouts, and
@@ -139,7 +139,6 @@ fn write_layout_to_backing_file_hyprland(id: u8, name: &str) -> anyhow::Result<(
 fn run_hyprland(sh: &Shell, args: &ArgMatches) -> anyhow::Result<Option<String>> {
     let keyboards = Devices::get()?.keyboards;
     let layout_names = get_layout_names_hyprland()?;
-    let layout_names_str = layout_names.iter().map(|e| e.as_ref()).collect::<Vec<_>>();
 
     let changed_layout_id = match args.subcommand() {
         Some(("next", _)) => {
@@ -160,14 +159,13 @@ fn run_hyprland(sh: &Shell, args: &ArgMatches) -> anyhow::Result<Option<String>>
             Some(prev)
         }
         Some(("choose", _)) => {
-            let chosen_layout_name = get_platform_dmenu().choose_one(
-                sh,
+            let chosen_layout_name = Dmenu::new(sh).choose_one(
                 "Choose keyboard layout",
-                &layout_names_str,
+                &layout_names,
+                String::as_ref,
                 true,
             )?;
-            let id =
-                lookup_keyboard_layout_id_by_name_hyprland(&layout_names, &chosen_layout_name)?;
+            let id = lookup_keyboard_layout_id_by_name_hyprland(&layout_names, chosen_layout_name)?;
             set_layout_by_id_hyprland(&keyboards, id)?;
             Some(id)
         }

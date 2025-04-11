@@ -7,7 +7,7 @@ use std::{
 use clap::{ArgMatches, Command, FromArgMatches, Parser, Subcommand};
 use xshell::{cmd, Shell};
 
-use crate::util::dmenu::get_platform_dmenu;
+use crate::util::dmenu::Dmenu;
 
 // TODO:
 // - show-status:
@@ -140,8 +140,8 @@ pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<Option<String>> {
             player
         } else {
             // unwrap: we don't want to continue if the resulting string is empty
-            get_platform_dmenu()
-                .choose_one(sh, "Choose media player to control", &players, true)
+            Dmenu::new(sh)
+                .choose_one_str("Choose media player to control", &players, true)
                 .unwrap()
         };
 
