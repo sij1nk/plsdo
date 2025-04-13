@@ -6,17 +6,18 @@ use xshell::{cmd, Shell};
 
 #[derive(Debug, Clone)]
 pub struct XkbLayoutData {
-    hyprland_id: u8,
+    pub hyprland_id: u8,
     // There are some other xkb fields here, but I'm not using them currently
-    layout: String,
+    pub layout: String,
     variant: String,
+    #[allow(dead_code)]
     options: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct XkbLayout {
-    name: String,
-    data: XkbLayoutData,
+    pub name: String,
+    pub data: XkbLayoutData,
 }
 
 #[derive(Deserialize, Debug, Clone)]

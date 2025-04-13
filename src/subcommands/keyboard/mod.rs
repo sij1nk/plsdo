@@ -1,19 +1,17 @@
 use std::{
+    fmt::Display,
     fs::{File, OpenOptions},
     io::{BufRead, BufReader, LineWriter, Write},
+    path::PathBuf,
 };
 
-use anyhow::anyhow;
-use clap::{arg, ArgMatches, Command};
-use hyprland::{
-    ctl::switch_xkb_layout::SwitchXKBLayoutCmdTypes,
-    data::{Devices, Keyboard as HyprlandKeyboard},
-    shared::HyprData,
-};
+use anyhow::{anyhow, Context};
+use clap::{arg, value_parser, ArgMatches, Command};
+use hyprland::{ctl::switch_xkb_layout::SwitchXKBLayoutCmdTypes, data::Devices, shared::HyprData};
 
 mod xkb;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use xkb::{get_xkb_layouts, XkbLayout};
 use xshell::{cmd, Shell};
 
@@ -25,6 +23,7 @@ use crate::{
 // TODO: do these really need to be Strings?
 #[derive(Debug, Clone)]
 struct AlternativeLayout {
+    id: String,
     name: String,
     dotfiles_path: String,
 }
@@ -35,118 +34,135 @@ enum KeyboardLayout {
     Alternative(AlternativeLayout),
 }
 
-#[derive(Deserialize, Debug, Clone)]
-struct HyprctlKbLayoutOption {
-    option: String,
-    #[serde(rename(deserialize = "str"))]
-    value: String,
-    set: bool,
+impl KeyboardLayout {
+    fn id(&self) -> &str {
+        match self {
+            Self::Xkb(layout) => layout.data.layout.as_str(),
+            Self::Alternative(layout) => layout.id.as_str(),
+        }
+    }
+    fn name(&self) -> &str {
+        match self {
+            Self::Xkb(layout) => layout.name.as_str(),
+            Self::Alternative(layout) => layout.name.as_str(),
+        }
+    }
+    fn dotfiles_path(&self) -> &str {
+        match self {
+            Self::Xkb(_) => SYSTEM_ATLAS.main_dotfiles,
+            Self::Alternative(layout) => layout.dotfiles_path.as_str(),
+        }
+    }
+    fn persisted_data(&self) -> PersistedData {
+        PersistedData {
+            layout_id: self.id().to_owned(),
+        }
+    }
 }
 
-fn get_layout_names_hyprland(sh: &Shell) -> anyhow::Result<Vec<String>> {
-    let layout_option_str = cmd!(sh, "hyprctl getoption input:kb_layout -j").read()?;
-    let layout_option = serde_json::from_str::<HyprctlKbLayoutOption>(&layout_option_str)?;
+impl PartialEq for KeyboardLayout {
+    fn eq(&self, other: &Self) -> bool {
+        self.id() == other.id()
+    }
+}
 
-    if !layout_option.set {
-        anyhow::bail!(
-            "'{}' is unset in the Hyprland configuration!",
-            layout_option.option
-        );
+impl Display for KeyboardLayout {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Xkb(layout) => write!(f, "{} ({})", layout.data.layout, layout.name),
+            Self::Alternative(layout) => write!(f, "{}", layout.name),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct PersistedData {
+    layout_id: String,
+}
+
+impl PersistedData {
+    fn read() -> anyhow::Result<Option<Self>> {
+        let file =
+            File::open(SYSTEM_ATLAS.keyboard_layout).context("The backing file does not exist")?;
+        let bufreader = BufReader::new(file);
+        let last_line = bufreader.lines().last();
+
+        match last_line {
+            Some(line) => {
+                let line = line.context("Failed to read lines from the backing file")?;
+                Ok(Some(serde_json::from_str::<Self>(&line)?))
+            }
+            None => Ok(None),
+        }
     }
 
-    let layouts = layout_option
-        .value
-        .split(',')
-        .map(|w| w.to_owned())
-        .collect();
-
-    Ok(layouts)
+    fn write(&self) -> anyhow::Result<()> {
+        let file = OpenOptions::new()
+            .create(false)
+            .append(true)
+            .open(SYSTEM_ATLAS.keyboard_layout)?;
+        let mut writer = LineWriter::new(&file);
+        serde_json::to_writer(&mut writer, self)?;
+        writer.write_all(b"\n")?;
+        Ok(())
+    }
 }
 
-/// Get the current layout identifier number by reading the backing file of the eww keyboard-layout
-/// widget, which we maintain ourselves. This is the only way of determining the current layout id,
-/// other than maintaining a translation map between full layout+options+variant names and ids
-fn get_current_layout_id_hyprland() -> anyhow::Result<u8> {
-    let file = File::open(SYSTEM_ATLAS.eww_keyboard_layout)?;
-    let bufreader = BufReader::new(file);
-    let last_line = bufreader
-        .lines()
-        .last()
-        .ok_or(anyhow!("The file should not be empty"))??;
+fn get_current_layout(all_layouts: &[KeyboardLayout]) -> anyhow::Result<&KeyboardLayout> {
+    let persisted_data = PersistedData::read()?;
 
-    // Line format: json "[<id>,<name>]"
-    // Could parse the json, but it might be simpler to parse the line by hand
-    let (id_part, _) = last_line
-        .split_once(',')
-        .ok_or(anyhow!("Last line did not have the expected format"))?;
-    // Get rid of the opening bracket
-    let id_part = &id_part[1..];
-    let id = id_part.parse::<u8>()?;
+    match persisted_data {
+        Some(data) => all_layouts
+            .iter()
+            .find(|l| l.id() == data.layout_id)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Persisted keyboard layout data does not match any of the known layouts"
+                )
+            }),
+        None => {
+            // some heuristics to try figure out the keyboard layout in use
+            std::fs::read_link("/home/rg/.config/nvim/init.lua")
+                .context("Example file does not exist, or is not a symlink")
+                .and_then(|path| {
+                    path.iter()
+                        .filter_map(|s| s.to_str())
+                        .find(|s| s.contains(".dotfiles"))
+                        .map(|s| s.to_owned())
+                        .ok_or_else(|| {
+                            anyhow!("Example file is not symlinked to a dotfiles folder")
+                        })
+                })
+                .map(|dotfiles_path_segment| {
+                    let found_layout = all_layouts.iter().find(|l| match l {
+                        KeyboardLayout::Xkb(_) => false,
+                        KeyboardLayout::Alternative(_) => PathBuf::from(l.dotfiles_path())
+                            .iter()
+                            .filter_map(|s| s.to_str())
+                            .any(|segment| segment == dotfiles_path_segment),
+                    });
 
-    Ok(id)
+                    match found_layout {
+                        Some(layout) => layout,
+                        None => &all_layouts[0],
+                    }
+                })
+        }
+    }
 }
 
-fn set_layout_by_id_hyprland(keyboards: &[HyprlandKeyboard], id: u8) -> anyhow::Result<()> {
+fn set_hyprland_layout_by_id(id: u8) -> anyhow::Result<()> {
+    let keyboards = Devices::get()?.keyboards;
     for kb in keyboards {
         hyprland::ctl::switch_xkb_layout::call(&kb.name, SwitchXKBLayoutCmdTypes::Id(id))?;
     }
     Ok(())
 }
 
-pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<Option<String>> {
-    let wm = determine_wm();
-
-    match wm {
-        WM::Hyprland => run_hyprland(sh, args),
-        WM::GenericX11 => run_x11(sh, args),
-    }
-}
-
-fn lookup_keyboard_layout_id_by_name_hyprland(
-    layout_names: &[impl AsRef<str>],
-    name: &str,
-) -> anyhow::Result<u8> {
-    Ok(layout_names
-        .iter()
-        .enumerate()
-        .find(|(_, layout_name)| layout_name.as_ref() == name)
-        .ok_or(anyhow!(
-            "The given layout name does not correspond to an existing layout"
-        ))?
-        .0
-        .try_into()?)
-}
-
-fn lookup_keyboard_layout_name_by_id_hyprland(
-    layout_names: &[impl AsRef<str>],
-    id: u8,
-) -> anyhow::Result<String> {
-    Ok(layout_names
-        .get(id as usize)
-        .ok_or(anyhow!("Given layout id should be valid at this point"))?
-        .as_ref()
-        .to_owned())
-}
-
-/// We're appending to the end of the backing file - eww uses `tail -F` to read the last line,
-/// which might act wonkily if you truncate the file...
-/// We're building the json by hand because it's very simple to do.
-/// * `id`: id of the keyboard layout
-/// * `name`: short name of the keyboard layout
-fn write_layout_to_backing_file_hyprland(id: u8, name: &str) -> anyhow::Result<()> {
-    let file = OpenOptions::new()
-        .create(false)
-        .append(true)
-        .open(SYSTEM_ATLAS.eww_keyboard_layout)?;
-    let mut writer = LineWriter::new(&file);
-    writeln!(writer, "[{},\"{}\"]", id, name)?;
-
-    Ok(())
-}
-
-fn run_hyprland(sh: &Shell, args: &ArgMatches) -> anyhow::Result<Option<String>> {
+fn collect_all_layouts(sh: &Shell) -> anyhow::Result<Vec<KeyboardLayout>> {
     let xkb_layouts = get_xkb_layouts(sh)?;
     let kyria_layout = AlternativeLayout {
+        id: "ky".to_owned(),
         name: "kyria".to_owned(),
         dotfiles_path: SYSTEM_ATLAS.canary_dotfiles.to_owned(),
     };
@@ -155,10 +171,62 @@ fn run_hyprland(sh: &Shell, args: &ArgMatches) -> anyhow::Result<Option<String>>
         xkb_layouts.into_iter().map(KeyboardLayout::Xkb).collect();
     all_layouts.push(KeyboardLayout::Alternative(kyria_layout));
 
-    let keyboards = Devices::get()?.keyboards;
-    let layout_names = get_layout_names_hyprland(sh)?;
+    Ok(all_layouts)
+}
 
-    let changed_layout_id = match args.subcommand() {
+fn switch_dotfiles(sh: &Shell, from_path: &str, to_path: &str) -> anyhow::Result<()> {
+    let dotter_local_path = "/home/rg/.dotfiles/.dotter/local.toml";
+
+    sh.change_dir(from_path);
+    cmd!(sh, "dotter undeploy -y -l {dotter_local_path}").run()?;
+
+    sh.change_dir(to_path);
+    cmd!(sh, "dotter deploy -y -l {dotter_local_path}").run()?;
+
+    Ok(())
+}
+
+fn set_layout(
+    sh: &Shell,
+    current_layout: &KeyboardLayout,
+    new_layout: &KeyboardLayout,
+) -> anyhow::Result<()> {
+    match new_layout {
+        KeyboardLayout::Xkb(xkb_layout) => {
+            if let KeyboardLayout::Alternative(_) = current_layout {
+                switch_dotfiles(
+                    sh,
+                    current_layout.dotfiles_path(),
+                    new_layout.dotfiles_path(),
+                )?;
+            }
+            set_hyprland_layout_by_id(xkb_layout.data.hyprland_id)?;
+            new_layout.persisted_data().write()?;
+        }
+        KeyboardLayout::Alternative(_) => {
+            if new_layout == current_layout {
+                return Ok(());
+            }
+
+            switch_dotfiles(
+                sh,
+                current_layout.dotfiles_path(),
+                new_layout.dotfiles_path(),
+            )?;
+            set_hyprland_layout_by_id(0)?;
+            new_layout.persisted_data().write()?;
+        }
+    }
+
+    Ok(())
+}
+
+fn run_hyprland(sh: &Shell, args: &ArgMatches) -> anyhow::Result<Option<String>> {
+    let layouts = collect_all_layouts(sh)?;
+    let current_layout = get_current_layout(&layouts)?;
+
+    match args.subcommand() {
+        Some(("init", _)) => initialize(current_layout)?,
         Some(("next", _)) => {
             // TODO: not sure what to do here yet...
             // it should not cycle between qwerty layouts and canary, because that switch is a bit
@@ -170,54 +238,68 @@ fn run_hyprland(sh: &Shell, args: &ArgMatches) -> anyhow::Result<Option<String>>
             unimplemented!()
         }
         Some(("choose", _)) => {
-            let chosen_layout_name = Dmenu::new(sh).choose_one(
+            let chosen_layout = Dmenu::new(sh).choose_one(
                 "Choose keyboard layout",
-                &layout_names,
-                String::as_ref,
+                &layouts,
+                |layout| layout.name(),
                 true,
             )?;
-            let id = lookup_keyboard_layout_id_by_name_hyprland(&layout_names, chosen_layout_name)?;
-            set_layout_by_id_hyprland(&keyboards, id)?;
-            Some(id)
+            set_layout(sh, current_layout, chosen_layout)?
         }
-        Some(("get", _)) => {
-            let id = get_current_layout_id_hyprland()?;
-            let name = lookup_keyboard_layout_name_by_id_hyprland(&layout_names, id)?;
-            println!("{name}");
-            None
-        }
+        Some(("get", _)) => println!("{}", current_layout),
         Some(("set", set_args)) => {
-            let name = set_args
-                .get_one::<String>("NAME")
-                .expect("NAME should be a required argument");
-            let id = lookup_keyboard_layout_id_by_name_hyprland(&layout_names, name)?;
-            set_layout_by_id_hyprland(&keyboards, id)?;
-            Some(id)
+            let id = set_args
+                .get_one::<usize>("ID")
+                .expect("ID should be a required argument");
+            let layout = layouts.get(*id).ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Given layout index is out of bounds (max: {})",
+                    layouts.len()
+                )
+            })?;
+            set_layout(sh, current_layout, layout)?;
         }
-        _ => None,
+        _ => {}
     };
 
-    if let Some(id) = changed_layout_id {
-        let name = lookup_keyboard_layout_name_by_id_hyprland(&layout_names, id)?;
-        write_layout_to_backing_file_hyprland(id, &name)?;
-    }
-
     Ok(None)
+}
+
+fn initialize(current_layout: &KeyboardLayout) -> anyhow::Result<()> {
+    if let KeyboardLayout::Xkb(layout) = current_layout {
+        set_hyprland_layout_by_id(layout.data.hyprland_id)
+    } else {
+        Ok(())
+    }
 }
 
 fn run_x11(_sh: &Shell, _args: &ArgMatches) -> anyhow::Result<Option<String>> {
     unimplemented!()
 }
 
+pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<Option<String>> {
+    let wm = determine_wm();
+
+    match wm {
+        WM::Hyprland => run_hyprland(sh, args),
+        WM::GenericX11 => run_x11(sh, args),
+    }
+}
+
 pub fn command_extension(cmd: Command) -> Command {
     let inner_subcommands = [
+        Command::new("init").about("Initialize keyboard layout"),
         Command::new("next").about("Select the next keyboard layout"),
         Command::new("prev").about("Select the previous keyboard layout"),
         Command::new("choose").about("Choose a keyboard layout from the list of layouts"),
         Command::new("get").about("Get the current keyboard layout name"),
         Command::new("set")
             .about("Select the layout specified by name")
-            .arg(arg!([NAME] "Name of the keyboard layout").required(true)),
+            .arg(
+                arg!([ID] "Identifier (index) of the keyboard layout")
+                    .value_parser(value_parser!(usize))
+                    .required(true),
+            ),
     ];
     cmd.subcommand_required(true)
         .subcommands(inner_subcommands.iter())
