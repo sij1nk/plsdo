@@ -36,7 +36,9 @@ pub fn command_extension(cmd: Command) -> Command {
 pub fn run(sh: &Shell, _: &ArgMatches) -> anyhow::Result<Option<String>> {
     let opts: Vec<_> = PowerMenuOption::iter().map(|opt| opt.to_string()).collect();
 
-    let result = Dmenu::new(sh).choose_one("Choose operation", &opts, String::as_ref, true)?;
+    let result = Dmenu::new(sh)
+        .numbered()
+        .choose_one("Choose operation", &opts, String::as_ref)?;
 
     PowerMenuOption::from_str(result)?.execute(sh)?;
 

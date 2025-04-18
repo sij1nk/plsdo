@@ -97,7 +97,9 @@ fn get_download_format(download_args: &ArgMatches, sh: &Shell) -> anyhow::Result
             let formats: Vec<_> = DownloadFormat::iter().map(|opt| opt.to_string()).collect();
             let formats_str = formats.iter().map(|e| e.as_ref()).collect::<Vec<_>>();
             Dmenu::new(sh)
-                .choose_one_str("Choose download format", &formats_str, true)
+                .numbered()
+                .auto_select()
+                .choose_one_str("Choose download format", &formats_str)
                 .and_then(|value| {
                     DownloadFormat::from_str(&value, true).map_err(|e| anyhow::anyhow!(e))
                 })

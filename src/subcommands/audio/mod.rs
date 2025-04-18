@@ -93,8 +93,11 @@ fn handle_output_subcommand(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()>
                 .map(|o| format!("{:?} | {}", o.friendly_name, o.description))
                 .collect::<Vec<_>>();
             choices.sort();
-            let result =
-                Dmenu::new(sh).choose_one("Choose audio output", &choices, String::as_ref, true)?;
+            let result = Dmenu::new(sh).numbered().auto_select().choose_one(
+                "Choose audio output",
+                &choices,
+                String::as_ref,
+            )?;
 
             let result_friendly_name = result
                 .split_once("|")

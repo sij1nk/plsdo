@@ -36,7 +36,7 @@ pub fn run(sh: &Shell, _: &ArgMatches) -> anyhow::Result<Option<String>> {
 
             // unwrap: we don't want to continue if the string is empty
             let chosen = Dmenu::new(sh)
-                .choose_one_str("Choose font family", &font_families, true)
+                .choose_one_str("Choose font family", &font_families)
                 .unwrap();
 
             util::modify_file(SYSTEM_ATLAS.alacritty, "font:\n", |lines, writer| {

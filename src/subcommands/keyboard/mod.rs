@@ -238,11 +238,10 @@ fn run_hyprland(sh: &Shell, args: &ArgMatches) -> anyhow::Result<Option<String>>
             unimplemented!()
         }
         Some(("choose", _)) => {
-            let chosen_layout = Dmenu::new(sh).choose_one(
+            let chosen_layout = Dmenu::new(sh).numbered().auto_select().choose_one(
                 "Choose keyboard layout",
                 &layouts,
                 |layout| layout.name(),
-                true,
             )?;
             set_layout(sh, current_layout, chosen_layout)?
         }

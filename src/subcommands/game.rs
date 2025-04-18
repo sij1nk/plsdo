@@ -32,13 +32,12 @@ pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<Option<String>> {
                 &format!("Choose game (no matches found for '{search}')"),
                 &choices,
                 String::as_ref,
-                true,
             )
             .unwrap()
     } else {
         // unwrap: we don't want to continue if result is empty
         dmenu
-            .choose_one("Choose game", &filtered_choices, String::as_ref, true)
+            .choose_one("Choose game", &filtered_choices, String::as_ref)
             .unwrap()
     };
 

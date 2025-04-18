@@ -141,7 +141,7 @@ pub fn run(sh: &Shell, args: &ArgMatches) -> anyhow::Result<Option<String>> {
         } else {
             // unwrap: we don't want to continue if the resulting string is empty
             Dmenu::new(sh)
-                .choose_one_str("Choose media player to control", &players, true)
+                .choose_one_str("Choose media player to control", &players)
                 .unwrap()
         };
 
