@@ -132,7 +132,6 @@ fn handle_volume_subcommand(sh: &Shell, args: &ArgMatches) -> anyhow::Result<()>
 }
 
 fn initialize(sh: &Shell) -> anyhow::Result<()> {
-    set_volume(sh, 25, false)?;
     let audio_state = get_current_audio_state(sh)?;
     write_to_backing_file(audio_state)
 }
