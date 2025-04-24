@@ -7,6 +7,7 @@ pub mod game;
 pub mod keyboard;
 pub mod playerctl;
 pub mod power;
+pub mod screenshot;
 pub mod torrent;
 pub mod workspace;
 pub mod ytdl;
