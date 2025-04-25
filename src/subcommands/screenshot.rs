@@ -221,11 +221,11 @@ pub fn command_extension(cmd: Command) -> Command {
         Command::new("window").about("Screenshot the focused window"),
         Command::new("monitor")
             .about("Screenshot the selected monitor, or the entire display, if there's only one monitor")
-            .arg(arg!([MONITOR] "The name of the monitor to screenshot. Required if the `monitor` target is used")
+            .arg(arg!([MONITOR] "The name of the monitor to screenshot")
                 .value_parser(clap::builder::NonEmptyStringValueParser::new())),
         Command::new("area")
             .about("Screenshot the selected area")
-            .arg(arg!([AREA] "The area to screenshot, in `x,y,w,h` format. Required if the `area` target is used")
+            .arg(arg!([AREA] "The area to screenshot, in `x,y,w,h` format")
                 .value_parser(Area::from_str)),
     ]).arg(
         arg!(-o --output <OUTPUT> "Where the screenshot should be saved to")
