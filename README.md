@@ -9,18 +9,20 @@ rewritten in Rust.
 Usage: plsdo <COMMAND>
 
 Commands:
-  power            Shut down, reboot or suspend the machine
-  keyboard_layout  Change the keyboard layout
-  font_size        Change the font size
-  font_family      Change the font family
-  playerctl        Control media players
-  game             Launch a game through Lutris
-  workspace        Manage desktop workspaces
-  brightness       Adjust the screen brightness
-  colortemp        Adjust the screen color temperature
-  audio            Adjust the audio volume or output
-  ytdl             Download videos using yt-dlp
-  help             Print this message or the help of the given subcommand(s)
+  power        Shut down, reboot or suspend the machine
+  keyboard     Change the keyboard layout
+  font_size    Change the font size
+  font_family  Change the font family
+  playerctl    Control media players
+  game         Launch a game through Lutris
+  workspace    Manage desktop workspaces
+  brightness   Adjust the screen brightness
+  colortemp    Adjust the screen color temperature
+  audio        Adjust the audio volume or output
+  ytdl         Download videos using yt-dlp
+  torrent      Manage torrents
+  screenshot   Take screenshots
+  help         Print this message or the help of the given subcommand(s)
 
 Options:
   -h, --help     Print help
