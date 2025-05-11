@@ -98,7 +98,6 @@ impl PersistedData {
 
     fn write(&self) -> anyhow::Result<()> {
         let file = OpenOptions::new()
-            .create(false)
             .append(true)
             .open(SYSTEM_ATLAS.keyboard_layout)?;
         let mut writer = LineWriter::new(&file);

@@ -42,7 +42,6 @@ fn handle_monitor_removed_event(_monitor_name: String) {
 
 pub fn write_submap_to_backing_file(submap_name: String) -> anyhow::Result<()> {
     let file = OpenOptions::new()
-        .create(true)
         .append(true)
         .open(SYSTEM_ATLAS.hypr_submap)?;
 

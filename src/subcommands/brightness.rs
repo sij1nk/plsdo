@@ -45,7 +45,6 @@ fn determine_delta(args: &ArgMatches) -> anyhow::Result<f64> {
 
 fn write_brightness_to_backing_file(brightness: f64) -> anyhow::Result<()> {
     let file = OpenOptions::new()
-        .create(false)
         .append(true)
         .open(SYSTEM_ATLAS.eww_brightness)?;
     let mut writer = LineWriter::new(&file);

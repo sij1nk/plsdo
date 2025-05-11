@@ -44,7 +44,6 @@ fn determine_delta(args: &ArgMatches) -> anyhow::Result<i16> {
 
 fn write_colortemp_to_backing_file(colortemp: u16) -> anyhow::Result<()> {
     let file = OpenOptions::new()
-        .create(false)
         .append(true)
         .open(SYSTEM_ATLAS.eww_colortemp)?;
     let mut writer = LineWriter::new(&file);

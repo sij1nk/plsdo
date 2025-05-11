@@ -55,7 +55,6 @@ pub fn write_workspace_state_to_backing_file() -> anyhow::Result<()> {
     };
 
     let file = OpenOptions::new()
-        .create(true)
         .append(true)
         .open(SYSTEM_ATLAS.eww_workspaces)?;
     let mut writer = LineWriter::new(&file);

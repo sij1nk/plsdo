@@ -79,7 +79,6 @@ impl From<PactlAudioSink> for AudioOutput {
 
 pub fn write_to_backing_file(audio_state: AudioState) -> anyhow::Result<()> {
     let file = OpenOptions::new()
-        .create(true)
         .append(true)
         .open(SYSTEM_ATLAS.eww_audio)?;
     let mut writer = LineWriter::new(&file);
