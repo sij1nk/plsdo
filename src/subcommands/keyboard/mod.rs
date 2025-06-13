@@ -121,7 +121,7 @@ fn get_current_layout(all_layouts: &[KeyboardLayout]) -> anyhow::Result<&Keyboar
             }),
         None => {
             // some heuristics to try figure out the keyboard layout in use
-            std::fs::read_link("/home/rg/.config/nvim/init.lua")
+            std::fs::read_link("/home/rg/.config/dotfiles_id")
                 .context("Example file does not exist, or is not a symlink")
                 .and_then(|path| {
                     path.iter()
