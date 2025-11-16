@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use xshell::{cmd, Shell};
 
 use crate::{
-    constants::{EARBUDS_NAME, HEADPHONES_CONTROLLER_NAME, SPEAKERS_CONTROLLER_NAME},
+    constants::{EARBUDS_NAME, HEADPHONES_CONTROLLER_NAME, TV_CONTROLLER_NAME},
     system_atlas::SYSTEM_ATLAS,
 };
 
@@ -23,8 +23,8 @@ pub struct AudioState {
 
 #[derive(ValueEnum, Serialize, Clone, Debug, PartialEq, Eq)]
 pub enum AudioOutputFriendlyName {
+    TV,
     Headphones,
-    Speakers,
     Earbuds,
     Unrecognized,
 }
@@ -59,10 +59,10 @@ impl From<PactlAudioSink> for AudioOutput {
     fn from(sink: PactlAudioSink) -> Self {
         // TODO: this is not very elaborate... maybe there is a way to assign labels to sinks in pipewire?
         // I should look into that
-        let output_type = if sink.description.starts_with(SPEAKERS_CONTROLLER_NAME) {
-            AudioOutputFriendlyName::Speakers
-        } else if sink.description.starts_with(HEADPHONES_CONTROLLER_NAME) {
+        let output_type = if sink.description.starts_with(HEADPHONES_CONTROLLER_NAME) {
             AudioOutputFriendlyName::Headphones
+        } else if sink.description.starts_with(TV_CONTROLLER_NAME) {
+            AudioOutputFriendlyName::TV
         } else if sink.description.starts_with(EARBUDS_NAME) {
             AudioOutputFriendlyName::Earbuds
         } else {
