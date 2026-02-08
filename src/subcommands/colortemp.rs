@@ -58,7 +58,7 @@ pub fn run(_: &Shell, args: &ArgMatches) -> anyhow::Result<Option<String>> {
     let connection = Connection::new_session()?;
     let proxy = connection.with_proxy("rs.wl-gammarelay", "/", Duration::from_secs(1));
 
-    proxy.method_call("rs.wl.gammarelay", "UpdateTemperature", (delta,))?;
+    proxy.method_call::<(), _, _, _>("rs.wl.gammarelay", "UpdateTemperature", (delta,))?;
     use dbus::blocking::stdintf::org_freedesktop_dbus::Properties;
 
     let colortemp_refarg: Box<dyn arg::RefArg> = proxy.get("rs.wl.gammarelay", "Temperature")?;
