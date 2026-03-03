@@ -444,8 +444,8 @@ fn open_pinned(args: &ArgMatches) -> anyhow::Result<()> {
             wm_class: "notes",
         },
         PinnedProgram {
-            name: "Firefox",
-            wm_class: "firefox",
+            name: "Waterfox",
+            wm_class: "waterfox",
         },
     ];
 
