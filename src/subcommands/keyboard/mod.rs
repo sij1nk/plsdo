@@ -168,7 +168,11 @@ fn collect_all_layouts(sh: &Shell) -> anyhow::Result<Vec<KeyboardLayout>> {
 
     let mut all_layouts: Vec<KeyboardLayout> =
         xkb_layouts.into_iter().map(KeyboardLayout::Xkb).collect();
-    all_layouts.push(KeyboardLayout::Alternative(kyria_layout));
+
+    // TODO: removed kyria layout from layout list for now
+    // I will have to rethink what to do with the kyria board, because switching
+    // to a new board + new layout at the same time is too much of an obstacle
+    // all_layouts.push(KeyboardLayout::Alternative(kyria_layout));
 
     Ok(all_layouts)
 }
